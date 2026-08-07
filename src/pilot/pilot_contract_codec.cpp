@@ -254,6 +254,7 @@ PilotRegistrationResponse parseRegistrationResponse(const std::string& response_
 
 PilotCatalogAcceptedResponse parseCatalogAcceptedResponse(const std::string& response_body,
                                                           const std::string& component_id,
+                                                          const std::string& server_instance_id,
                                                           int descriptor_count) {
     boost::json::error_code error;
     const boost::json::value value = boost::json::parse(response_body, error);
@@ -272,12 +273,77 @@ PilotCatalogAcceptedResponse parseCatalogAcceptedResponse(const std::string& res
     const std::uint64_t session_generation =
         requireNonNegativeInteger(object, "session_generation");
     const std::uint64_t catalog_revision = requireNonNegativeInteger(object, "catalog_revision");
-    if (response.component_id != component_id || response.catalog_generation == 0U ||
+    if (response.component_id != component_id ||
+        response.server_instance_id != server_instance_id || response.catalog_generation == 0U ||
         session_generation == 0U || catalog_revision == 0U ||
         parsed_count != static_cast<std::uint64_t>(descriptor_count)) {
         throw std::invalid_argument("Pilot catalog response does not match the publication.");
     }
     response.descriptor_count = descriptor_count;
+    return response;
+}
+
+PilotLifecycleAcceptedResponse parseLifecycleAcceptedResponse(const std::string& response_body) {
+    boost::json::error_code error;
+    const boost::json::value value = boost::json::parse(response_body, error);
+    if (error || !value.is_object()) {
+        throw std::invalid_argument("Pilot lifecycle response must be a JSON object.");
+    }
+    const boost::json::object& object = value.as_object();
+    if (object.size() != 2U || !object.if_contains("status") || object.at("status") != "accepted") {
+        throw std::invalid_argument("Pilot lifecycle response is not accepted.");
+    }
+    const boost::json::value* p_snapshot = object.if_contains("snapshot");
+    if (p_snapshot == nullptr || !p_snapshot->is_object()) {
+        throw std::invalid_argument("Pilot lifecycle response has no snapshot.");
+    }
+    const boost::json::object& snapshot = p_snapshot->as_object();
+    if (snapshot.size() != 6U) {
+        throw std::invalid_argument("Pilot lifecycle snapshot has unknown or missing fields.");
+    }
+    PilotLifecycleAcceptedResponse response;
+    response.server_instance_id = requireIdentifier(snapshot, "server_instance_id");
+    static_cast<void>(requireNonNegativeInteger(snapshot, "revision"));
+    static_cast<void>(requireNonNegativeInteger(snapshot, "created_at_ns"));
+    const boost::json::value* p_readiness = snapshot.if_contains("readiness");
+    const boost::json::value* p_components = snapshot.if_contains("components");
+    const boost::json::value* p_control = snapshot.if_contains("control");
+    if (p_readiness == nullptr || !p_readiness->is_object() || p_components == nullptr ||
+        !p_components->is_array() || p_control == nullptr || !p_control->is_object()) {
+        throw std::invalid_argument("Pilot lifecycle snapshot shape is invalid.");
+    }
+    const boost::json::object& readiness = p_readiness->as_object();
+    if (readiness.size() != 7U) {
+        throw std::invalid_argument("Pilot lifecycle readiness has unknown or missing fields.");
+    }
+    for (const char* key :
+         {"api_ready", "control_connected", "component_registry_ready", "active_source_ready",
+          "required_observations_ready", "command_forwarding_enabled"}) {
+        const boost::json::value* p_value = readiness.if_contains(key);
+        if (p_value == nullptr || !p_value->is_bool()) {
+            throw std::invalid_argument("Pilot lifecycle readiness flag is invalid.");
+        }
+    }
+    const boost::json::value* p_reasons = readiness.if_contains("degraded_reasons");
+    if (p_reasons == nullptr || !p_reasons->is_array()) {
+        throw std::invalid_argument("Pilot lifecycle degraded reasons are invalid.");
+    }
+    for (const boost::json::value& reason : p_reasons->as_array()) {
+        if (!reason.is_string()) {
+            throw std::invalid_argument("Pilot lifecycle degraded reason is invalid.");
+        }
+    }
+    const boost::json::object& control = p_control->as_object();
+    if (control.size() != 5U) {
+        throw std::invalid_argument("Pilot lifecycle control has unknown or missing fields.");
+    }
+    for (const char* key :
+         {"gateway", "robot_state", "status", "last_delivery", "last_external_operation"}) {
+        const boost::json::value* p_value = control.if_contains(key);
+        if (p_value == nullptr || (!p_value->is_null() && !p_value->is_object())) {
+            throw std::invalid_argument("Pilot lifecycle control projection is invalid.");
+        }
+    }
     return response;
 }
 

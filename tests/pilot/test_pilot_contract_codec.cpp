@@ -63,12 +63,25 @@ TEST(PilotContractCodec, ValidatesCatalogAcceptanceAgainstPublication) {
     const std::string accepted =
         R"json({"status":"accepted","server_instance_id":"pilot-instance","component_id":"camera.fake","session_generation":1,"catalog_generation":1,"catalog_revision":1,"descriptor_count":9})json";
     const PilotCatalogAcceptedResponse response =
-        parseCatalogAcceptedResponse(accepted, "camera.fake", 9);
+        parseCatalogAcceptedResponse(accepted, "camera.fake", "pilot-instance", 9);
     EXPECT_EQ(response.catalog_generation, 1U);
     EXPECT_THROW(
         parseCatalogAcceptedResponse(
             R"json({"status":"accepted","server_instance_id":"pilot-instance","component_id":"camera.fake","session_generation":0,"catalog_generation":1,"catalog_revision":1,"descriptor_count":9})json",
-            "camera.fake", 9),
+            "camera.fake", "pilot-instance", 9),
+        std::invalid_argument);
+    EXPECT_THROW(parseCatalogAcceptedResponse(accepted, "camera.fake", "other-instance", 9),
+                 std::invalid_argument);
+}
+
+TEST(PilotContractCodec, RejectsMalformedLifecycleAcceptedResponses) {
+    const std::string accepted =
+        R"json({"status":"accepted","snapshot":{"server_instance_id":"pilot-instance","revision":1,"created_at_ns":1,"readiness":{"api_ready":true,"control_connected":true,"component_registry_ready":true,"active_source_ready":true,"required_observations_ready":true,"command_forwarding_enabled":true,"degraded_reasons":[]},"components":[],"control":{"gateway":null,"robot_state":null,"status":null,"last_delivery":null,"last_external_operation":null}}})json";
+    EXPECT_EQ(parseLifecycleAcceptedResponse(accepted).server_instance_id, "pilot-instance");
+    EXPECT_THROW(parseLifecycleAcceptedResponse(R"json({})json"), std::invalid_argument);
+    EXPECT_THROW(
+        parseLifecycleAcceptedResponse(
+            R"json({"status":"accepted","snapshot":{"server_instance_id":"pilot-instance","revision":1,"created_at_ns":1,"readiness":{"api_ready":true,"control_connected":true,"component_registry_ready":true,"active_source_ready":true,"required_observations_ready":true,"command_forwarding_enabled":true,"degraded_reasons":[]},"components":[],"control":{"gateway":null,"robot_state":null,"status":null,"last_delivery":null,"last_external_operation":null},"extra":true}})json"),
         std::invalid_argument);
 }
 

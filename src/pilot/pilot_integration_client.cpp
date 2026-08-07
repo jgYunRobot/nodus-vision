@@ -10,6 +10,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <cstdint>
+#include <limits>
 #include <mutex>
 #include <optional>
 #include <stdexcept>
@@ -102,19 +103,22 @@ class PilotIntegrationClient::Impl {
         m_snapshot.enabled = m_config.pilot.enabled;
         m_snapshot.state = state;
         m_snapshot.last_error = error;
-        if (error.empty()) {
-            m_last_success = std::chrono::steady_clock::now();
-        }
     }
 
-    void updateSuccess() {
+    void recordSuccess() {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        m_last_success = std::chrono::steady_clock::now();
+    }
+
+    void updateOnlineSuccess() {
         std::lock_guard<std::mutex> lock(m_mutex);
         m_snapshot.state = PilotIntegrationState::e_ONLINE;
         m_snapshot.last_error.clear();
         m_last_success = std::chrono::steady_clock::now();
     }
 
-    PublishResult publishCatalog(const std::string& session_id) {
+    PublishResult publishCatalog(const std::string& session_id,
+                                 const std::string& server_instance_id) {
         const std::string publication_id = "catalog-" + m_instance_id + "-1";
         const std::string publication_body =
             serializeCatalogPublicationRequest(publication_id, 0U, m_catalog.descriptors);
@@ -130,7 +134,7 @@ class PilotIntegrationClient::Impl {
             if (result.status == 200) {
                 try {
                     const PilotCatalogAcceptedResponse response = parseCatalogAcceptedResponse(
-                        result.body, m_config.component_id,
+                        result.body, m_config.component_id, server_instance_id,
                         static_cast<int>(m_catalog.descriptors.size()));
                     {
                         std::lock_guard<std::mutex> lock(m_mutex);
@@ -138,6 +142,7 @@ class PilotIntegrationClient::Impl {
                         m_snapshot.catalog_generation = response.catalog_generation;
                         m_snapshot.descriptor_count = response.descriptor_count;
                     }
+                    recordSuccess();
                     return PublishResult::e_PUBLISHED;
                 } catch (const std::exception&) {
                     setSnapshot(PilotIntegrationState::e_RECOVERING, "invalid_catalog_response");
@@ -193,10 +198,13 @@ class PilotIntegrationClient::Impl {
         while (!m_stop_requested.load()) {
             setSnapshot(PilotIntegrationState::e_REGISTERING);
             PilotRegistrationRequest request;
+            {
+                std::lock_guard<std::mutex> lock(m_mutex);
+                request.initial_state = makePilotState(m_current_state);
+            }
             request.component_id = m_config.component_id;
             request.instance_id = m_instance_id;
             request.capabilities = m_catalog.capabilities;
-            request.initial_state = makePilotState(m_current_state);
             request.started_at_ns = m_started_at_ns;
             request.metadata["device_id"] = m_config.device_id;
             request.metadata["sensor_frame"] = m_config.calibration.sensor_frame;
@@ -212,6 +220,7 @@ class PilotIntegrationClient::Impl {
                 try {
                     const PilotRegistrationResponse response =
                         parseRegistrationResponse(result.body);
+                    recordSuccess();
                     session_id = response.session_id;
                     sequence = 1U;
                     {
@@ -221,7 +230,8 @@ class PilotIntegrationClient::Impl {
                         m_snapshot.catalog_generation = 0U;
                         m_snapshot.descriptor_count = 0;
                     }
-                    const PublishResult publish_result = publishCatalog(session_id);
+                    const PublishResult publish_result =
+                        publishCatalog(session_id, response.server_instance_id);
                     if (publish_result == PublishResult::e_STOPPED) {
                         break;
                     }
@@ -231,7 +241,7 @@ class PilotIntegrationClient::Impl {
                     if (publish_result == PublishResult::e_REPLACE_SESSION) {
                         session_id.clear();
                     } else {
-                        updateSuccess();
+                        updateOnlineSuccess();
                         retry_count = 0;
                         if (runSession(session_id, response.heartbeat_interval_ms, sequence)) {
                             break;
@@ -307,7 +317,19 @@ class PilotIntegrationClient::Impl {
                                                                      : "lifecycle_transport_error");
                 return false;
             }
-            updateSuccess();
+            try {
+                const PilotLifecycleAcceptedResponse response =
+                    parseLifecycleAcceptedResponse(result.body);
+                if (response.server_instance_id != getServerInstanceId()) {
+                    setSnapshot(PilotIntegrationState::e_RECOVERING,
+                                "lifecycle_server_instance_mismatch");
+                    return false;
+                }
+            } catch (const std::exception&) {
+                setSnapshot(PilotIntegrationState::e_RECOVERING, "invalid_lifecycle_response");
+                return false;
+            }
+            updateOnlineSuccess();
             next_heartbeat =
                 std::chrono::steady_clock::now() + std::chrono::milliseconds(heartbeat_interval_ms);
         }
@@ -329,6 +351,11 @@ class PilotIntegrationClient::Impl {
     std::uint64_t m_started_at_ns{0U};
     bool m_started{false};
     std::atomic<bool> m_stop_requested{false};
+
+    std::string getServerInstanceId() const {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        return m_snapshot.server_instance_id;
+    }
 };
 
 PilotIntegrationClient::PilotIntegrationClient(VisionConfig config,
@@ -344,6 +371,8 @@ void PilotIntegrationClient::startClient(ProviderState initial_state) {
     }
     m_p_impl->m_started = true;
     m_p_impl->m_current_state = initial_state;
+    m_p_impl->m_pending_state.reset();
+    m_p_impl->m_last_success = {};
     m_p_impl->m_snapshot = {};
     m_p_impl->m_snapshot.enabled = m_p_impl->m_config.pilot.enabled;
     if (!m_p_impl->m_config.pilot.enabled) {
@@ -367,6 +396,7 @@ void PilotIntegrationClient::updateProviderState(ProviderState state) {
     if (!m_p_impl->m_started || !m_p_impl->m_config.pilot.enabled) {
         return;
     }
+    m_p_impl->m_current_state = state;
     m_p_impl->m_pending_state = state;
     m_p_impl->m_condition.notify_one();
 }
@@ -397,10 +427,11 @@ PilotIntegrationSnapshot PilotIntegrationClient::getSnapshot() const {
     std::lock_guard<std::mutex> lock(m_p_impl->m_mutex);
     PilotIntegrationSnapshot snapshot = m_p_impl->m_snapshot;
     if (m_p_impl->m_last_success.time_since_epoch().count() != 0) {
+        const auto age_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                std::chrono::steady_clock::now() - m_p_impl->m_last_success)
+                                .count();
         snapshot.last_success_age_ms =
-            static_cast<int>(std::chrono::duration_cast<std::chrono::milliseconds>(
-                                 std::chrono::steady_clock::now() - m_p_impl->m_last_success)
-                                 .count());
+            static_cast<int>(std::min<std::int64_t>(age_ms, std::numeric_limits<int>::max()));
     }
     return snapshot;
 }

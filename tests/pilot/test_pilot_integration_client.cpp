@@ -34,6 +34,9 @@ enum class CatalogResponseMode {
     e_MALFORMED_ACCEPTED,
     e_UNKNOWN_CONFLICT,
     e_PERMANENT_CONFLICT,
+    e_CATALOG_SERVER_MISMATCH,
+    e_MALFORMED_LIFECYCLE,
+    e_REJECT_STATE_WRITE,
 };
 
 class FakePilotLifecycle {
@@ -70,6 +73,10 @@ class FakePilotLifecycle {
     }
 
    private:
+    static std::string makeLifecycleAcceptedResponse() {
+        return R"json({"status":"accepted","snapshot":{"server_instance_id":"pilot-instance","revision":1,"created_at_ns":1,"readiness":{"api_ready":true,"control_connected":true,"component_registry_ready":true,"active_source_ready":true,"required_observations_ready":true,"command_forwarding_enabled":true,"degraded_reasons":[]},"components":[],"control":{"gateway":null,"robot_state":null,"status":null,"last_delivery":null,"last_external_operation":null}}})json";
+    }
+
     void runServer() {
         while (m_running.load()) {
             tcp::socket socket(m_io_context);
@@ -113,10 +120,23 @@ class FakePilotLifecycle {
                 } else if (m_catalog_response_mode == CatalogResponseMode::e_PERMANENT_CONFLICT) {
                     status = http::status::conflict;
                     body = R"json({"error":{"code":"duplicate_descriptor_id"}})json";
+                } else if (m_catalog_response_mode ==
+                           CatalogResponseMode::e_CATALOG_SERVER_MISMATCH) {
+                    body =
+                        R"json({"status":"accepted","server_instance_id":"other-pilot","component_id":"camera.fake","session_generation":1,"catalog_generation":1,"catalog_revision":1,"descriptor_count":9})json";
                 } else {
                     body =
                         R"json({"status":"accepted","server_instance_id":"pilot-instance","component_id":"camera.fake","session_generation":1,"catalog_generation":1,"catalog_revision":1,"descriptor_count":9})json";
                 }
+            } else if (target.find("/state") != std::string::npos &&
+                       m_catalog_response_mode == CatalogResponseMode::e_REJECT_STATE_WRITE) {
+                status = http::status::service_unavailable;
+            } else if (target.find("/heartbeat") != std::string::npos ||
+                       target.find("/state") != std::string::npos ||
+                       target.find("/disconnect") != std::string::npos) {
+                body = m_catalog_response_mode == CatalogResponseMode::e_MALFORMED_LIFECYCLE
+                           ? "{}"
+                           : makeLifecycleAcceptedResponse();
             }
             http::response<http::string_body> response(status, request.version());
             response.set(http::field::content_type, "application/json");
@@ -249,6 +269,7 @@ TEST(PilotIntegrationClient, MissingPilotLeavesRecoveringSnapshotAndStops) {
     client.startClient(ProviderState::e_READY);
     ASSERT_TRUE(waitFor(
         [&client]() { return client.getSnapshot().state == PilotIntegrationState::e_RECOVERING; }));
+    EXPECT_EQ(client.getSnapshot().last_success_age_ms, -1);
     const auto started_at = std::chrono::steady_clock::now();
     client.stopClient();
     EXPECT_LT(std::chrono::steady_clock::now() - started_at, std::chrono::milliseconds(200));
@@ -307,6 +328,64 @@ TEST(PilotIntegrationClient, RejectsUnknownAndPermanentCatalogConflictsWithoutRe
         client.stopClient();
         EXPECT_EQ(countRequests(server.getRequests(), "/api/v1/components/register"), 1);
         EXPECT_EQ(countRequests(server.getRequests(), "/endpoint-catalog"), 1);
+    }
+}
+
+TEST(PilotIntegrationClient, PreservesLatestStateForReregistrationAfterStateWriteFailure) {
+    FakePilotLifecycle server(CatalogResponseMode::e_REJECT_STATE_WRITE);
+    VisionConfig config = makeConfig(server.getBaseUrl());
+    config.pilot.retry_initial_delay_ms = 20;
+    config.pilot.retry_max_delay_ms = 20;
+    PilotIntegrationClient client(config,
+                                  []() { return "vision-00112233445566778899aabbccddeeff"; });
+    client.startClient(ProviderState::e_READY);
+    ASSERT_TRUE(waitFor(
+        [&client]() { return client.getSnapshot().state == PilotIntegrationState::e_ONLINE; }));
+    client.updateProviderState(ProviderState::e_DEGRADED);
+    ASSERT_TRUE(waitFor([&server]() {
+        return countRequests(server.getRequests(), "/api/v1/components/register") >= 2;
+    }));
+    client.stopClient();
+    const std::vector<std::pair<std::string, std::string>> requests = server.getRequests();
+    int registrations_seen = 0;
+    for (const auto& request : requests) {
+        if (request.first != "/api/v1/components/register") {
+            continue;
+        }
+        ++registrations_seen;
+        if (registrations_seen == 2) {
+            EXPECT_EQ(boost::json::parse(request.second)
+                          .as_object()
+                          .at("initial_state")
+                          .as_object()
+                          .at("health"),
+                      "degraded");
+        }
+    }
+    EXPECT_GE(registrations_seen, 2);
+}
+
+TEST(PilotIntegrationClient, RecoversFromMalformedLifecycleAndCatalogServerMismatch) {
+    const std::vector<CatalogResponseMode> malformed_modes = {
+        CatalogResponseMode::e_MALFORMED_LIFECYCLE,
+        CatalogResponseMode::e_CATALOG_SERVER_MISMATCH,
+    };
+    for (const CatalogResponseMode mode : malformed_modes) {
+        FakePilotLifecycle server(mode);
+        VisionConfig config = makeConfig(server.getBaseUrl());
+        config.pilot.retry_initial_delay_ms = 100;
+        config.pilot.retry_max_delay_ms = 100;
+        PilotIntegrationClient client(config,
+                                      []() { return "vision-00112233445566778899aabbccddeeff"; });
+        client.startClient(ProviderState::e_READY);
+        ASSERT_TRUE(waitFor([&client]() {
+            return client.getSnapshot().state == PilotIntegrationState::e_RECOVERING;
+        }));
+        const PilotIntegrationSnapshot snapshot = client.getSnapshot();
+        EXPECT_GE(snapshot.last_success_age_ms, 0);
+        EXPECT_TRUE(snapshot.last_error == "invalid_lifecycle_response" ||
+                    snapshot.last_error == "invalid_catalog_response");
+        client.stopClient();
     }
 }
 

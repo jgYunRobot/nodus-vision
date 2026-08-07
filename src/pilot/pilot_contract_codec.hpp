@@ -77,6 +77,11 @@ struct PilotCatalogAcceptedResponse {
     int descriptor_count{0};
 };
 
+/** @brief strict validated lifecycle accepted response DTO다. */
+struct PilotLifecycleAcceptedResponse {
+    std::string server_instance_id;
+};
+
 /** @brief deterministic production/test instance ID generator seam이다. */
 using InstanceIdGenerator = std::function<std::string()>;
 
@@ -93,7 +98,10 @@ PilotRegistrationResponse parseRegistrationResponse(const std::string& response_
 /** @brief strict public catalog accepted response를 parse하고 validate한다. */
 PilotCatalogAcceptedResponse parseCatalogAcceptedResponse(const std::string& response_body,
                                                           const std::string& component_id,
+                                                          const std::string& server_instance_id,
                                                           int descriptor_count);
+/** @brief strict public lifecycle accepted response를 parse하고 validate한다. */
+PilotLifecycleAcceptedResponse parseLifecycleAcceptedResponse(const std::string& response_body);
 /** @brief heartbeat request를 serialize한다. */
 std::string serializeHeartbeatRequest(std::uint64_t sequence);
 /** @brief coarse state update request를 serialize한다. */

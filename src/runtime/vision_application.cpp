@@ -449,10 +449,19 @@ void VisionApplication::startApplication() {
                     }
                 } catch (const std::exception&) {
                     if (!m_p_impl->m_stop_requested.load()) {
+                        bool publish_degraded_state = false;
                         {
                             std::lock_guard<std::mutex> lock(m_p_impl->m_mutex);
                             m_p_impl->m_health.last_error =
                                 "Camera frame capture failed; retrying.";
+                            if (m_p_impl->m_health.state != ProviderState::e_DEGRADED) {
+                                m_p_impl->m_health.state = ProviderState::e_DEGRADED;
+                                publish_degraded_state = true;
+                            }
+                        }
+                        if (publish_degraded_state && m_p_impl->m_p_pilot_client != nullptr) {
+                            m_p_impl->m_p_pilot_client->updateProviderState(
+                                ProviderState::e_DEGRADED);
                         }
                         std::this_thread::sleep_for(
                             std::chrono::milliseconds(CAPTURE_ERROR_RETRY_MS));
@@ -486,6 +495,7 @@ void VisionApplication::stopApplication() noexcept {
     }
 
     if (p_pilot_client != nullptr) {
+        p_pilot_client->updateProviderState(ProviderState::e_STOPPING);
         p_pilot_client->stopClient();
     }
 

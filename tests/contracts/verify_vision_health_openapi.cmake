@@ -9,6 +9,7 @@ foreach(required_value IN ITEMS
         "type: [string, 'null']"
         "last_success_age_ms:"
         "type: [integer, 'null']"
+        "maximum: 2147483647"
         "const: '1.1.0'")
     string(FIND "${openapi}" "${required_value}" value_index)
     if(value_index EQUAL -1)

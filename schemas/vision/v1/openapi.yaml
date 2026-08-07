@@ -395,6 +395,7 @@ components:
             last_success_age_ms:
               type: [integer, 'null']
               minimum: 0
+              maximum: 2147483647
             last_error:
               type: [string, 'null']
         last_error:
