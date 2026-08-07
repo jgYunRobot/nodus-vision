@@ -5,6 +5,7 @@
 
 #include "pilot_integration_client.hpp"
 
+#include <atomic>
 #include <boost/json.hpp>
 #include <chrono>
 #include <condition_variable>
@@ -106,10 +107,10 @@ class PilotIntegrationClient::Impl {
         const std::string target =
             "/api/v1/components/" + encodePathSegment(session_id) + "/endpoint-catalog";
         int retry_count = 0;
-        while (!m_stop_requested) {
+        while (!m_stop_requested.load()) {
             const PilotHttpResult result =
                 m_p_transport->executeRequest({"PUT", target, publication_body});
-            if (m_stop_requested) {
+            if (m_stop_requested.load()) {
                 return PublishResult::e_STOPPED;
             }
             if (result.status == 200) {
@@ -157,7 +158,7 @@ class PilotIntegrationClient::Impl {
                 m_config.pilot.retry_initial_delay_ms * (1 << std::min(retry_count - 1, 10)));
             std::unique_lock<std::mutex> lock(m_mutex);
             m_condition.wait_for(lock, std::chrono::milliseconds(capped_delay),
-                                 [this]() { return m_stop_requested; });
+                                 [this]() { return m_stop_requested.load(); });
         }
         return PublishResult::e_STOPPED;
     }
@@ -166,7 +167,7 @@ class PilotIntegrationClient::Impl {
         std::string session_id;
         std::uint64_t sequence = 1U;
         int retry_count = 0;
-        while (!m_stop_requested) {
+        while (!m_stop_requested.load()) {
             setSnapshot(PilotIntegrationState::e_REGISTERING);
             PilotRegistrationRequest request;
             request.component_id = m_config.component_id;
@@ -181,7 +182,7 @@ class PilotIntegrationClient::Impl {
             request.clock_domain = m_config.pilot.clock_domain;
             PilotHttpResult result = m_p_transport->executeRequest(
                 {"POST", "/api/v1/components/register", serializeRegistrationRequest(request)});
-            if (m_stop_requested) {
+            if (m_stop_requested.load()) {
                 break;
             }
             if (result.status == 201) {
@@ -235,7 +236,7 @@ class PilotIntegrationClient::Impl {
                 m_config.pilot.retry_initial_delay_ms * (1 << std::min(retry_count - 1, 10)));
             std::unique_lock<std::mutex> lock(m_mutex);
             m_condition.wait_for(lock, std::chrono::milliseconds(capped_delay),
-                                 [this]() { return m_stop_requested; });
+                                 [this]() { return m_stop_requested.load(); });
         }
         if (!session_id.empty()) {
             setSnapshot(PilotIntegrationState::e_STOPPING);
@@ -252,14 +253,14 @@ class PilotIntegrationClient::Impl {
         const std::string session_path = "/api/v1/components/" + encodePathSegment(session_id);
         std::chrono::steady_clock::time_point next_heartbeat =
             std::chrono::steady_clock::now() + std::chrono::milliseconds(heartbeat_interval_ms);
-        while (!m_stop_requested) {
+        while (!m_stop_requested.load()) {
             std::optional<ProviderState> pending_state;
             {
                 std::unique_lock<std::mutex> lock(m_mutex);
                 m_condition.wait_until(lock, next_heartbeat, [this]() {
-                    return m_stop_requested || m_pending_state.has_value();
+                    return m_stop_requested.load() || m_pending_state.has_value();
                 });
-                if (m_stop_requested) {
+                if (m_stop_requested.load()) {
                     return true;
                 }
                 pending_state = m_pending_state;
@@ -274,7 +275,7 @@ class PilotIntegrationClient::Impl {
                            serializeHeartbeatRequest(sequence++)};
             }
             const PilotHttpResult result = m_p_transport->executeRequest(request);
-            if (m_stop_requested) {
+            if (m_stop_requested.load()) {
                 return true;
             }
             if (result.status != 200) {
@@ -304,7 +305,7 @@ class PilotIntegrationClient::Impl {
     std::string m_instance_id;
     std::uint64_t m_started_at_ns{0U};
     bool m_started{false};
-    bool m_stop_requested{false};
+    std::atomic<bool> m_stop_requested{false};
 };
 
 PilotIntegrationClient::PilotIntegrationClient(VisionConfig config,
@@ -329,7 +330,7 @@ void PilotIntegrationClient::startClient(ProviderState initial_state) {
     m_p_impl->m_catalog = VisionEndpointCatalogBuilder().buildCatalog(m_p_impl->m_config);
     m_p_impl->m_instance_id = generateInstanceId(m_p_impl->m_instance_id_generator);
     m_p_impl->m_started_at_ns = getSteadyNowNs();
-    m_p_impl->m_stop_requested = false;
+    m_p_impl->m_stop_requested.store(false);
     m_p_impl->m_p_transport = std::make_unique<PilotHttpTransport>(
         m_p_impl->m_config.pilot.base_url, m_p_impl->m_config.pilot.connect_timeout_ms,
         std::min(m_p_impl->m_config.pilot.request_timeout_ms,
@@ -354,7 +355,7 @@ void PilotIntegrationClient::stopClient() noexcept {
         if (!m_p_impl->m_started) {
             return;
         }
-        m_p_impl->m_stop_requested = true;
+        m_p_impl->m_stop_requested.store(true);
         m_p_impl->m_condition.notify_one();
         p_transport = m_p_impl->m_p_transport.get();
     }

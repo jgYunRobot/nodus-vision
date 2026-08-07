@@ -218,4 +218,17 @@ TEST(PilotIntegrationClient, MissingPilotLeavesRecoveringSnapshotAndStops) {
     EXPECT_LT(std::chrono::steady_clock::now() - started_at, std::chrono::milliseconds(200));
 }
 
+TEST(PilotIntegrationClient, RepeatedStartAndStopOwnsOneWorkerAtATime) {
+    FakePilotLifecycle server;
+    PilotIntegrationClient client(makeConfig(server.getBaseUrl()),
+                                  []() { return "vision-00112233445566778899aabbccddeeff"; });
+    for (int attempt = 0; attempt < 5; ++attempt) {
+        client.startClient(ProviderState::e_READY);
+        ASSERT_TRUE(waitFor(
+            [&client]() { return client.getSnapshot().state == PilotIntegrationState::e_ONLINE; }));
+        client.stopClient();
+        EXPECT_EQ(client.getSnapshot().state, PilotIntegrationState::e_STOPPED);
+    }
+}
+
 }  // namespace nodus_vision
