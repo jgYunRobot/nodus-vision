@@ -1,5 +1,37 @@
 # Progress
 
+## 2026-08-08 - Phase 4 P4-3 component lifecycle client
+
+### Changes
+
+- Added a single-worker lifecycle client that owns the opaque session, registration retry state,
+  heartbeat/state sequence, and bounded best-effort disconnect. State changes coalesce to one
+  pending coarse provider state and share the same increasing sequence with heartbeats.
+- Added strict public serializers for heartbeat, state update, and disconnect; session IDs are
+  percent-encoded only for the HTTP path and never copied to the public health snapshot.
+- Added redacted Pilot integration health values: enabled/state, server instance ID, catalog
+  generation/count placeholders, retry count, last-success age, and stable error code only.
+- Added fake-Pilot lifecycle tests for no-network disabled mode, absent-Pilot recovery and bounded
+  stop, registration, encoded disconnect, and strictly increasing lifecycle writes.
+
+### Status
+
+- P4-3 is complete. Catalog publication is deliberately not issued yet; its publication identity,
+  generation, idempotency behavior, and tests are P4-4 responsibilities.
+
+### Validation
+
+- `clang-format-18` formatted the changed C++ files.
+- `cmake --build --preset debug` and the local fake-Pilot lifecycle test passed. The test confirms
+  that `opaque/session secret` is encoded for requests and excluded from the redacted snapshot.
+- No Pilot source/process, physical camera, recording, geometry extension, or payload relay was
+  used.
+
+### Next goals
+
+- Implement P4-4 full endpoint catalog publication, session-local generation/publication identity,
+  and idempotent publication retry behavior.
+
 ## 2026-08-08 - Phase 4 P4-2 bounded public HTTP transport
 
 ### Changes

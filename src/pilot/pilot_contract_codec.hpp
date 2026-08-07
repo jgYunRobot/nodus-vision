@@ -82,6 +82,12 @@ std::string serializeCatalogPublicationRequest(
     const std::vector<PilotEndpointDescriptor>& descriptors);
 /** @brief strict public registration response를 parse하고 validate한다. */
 PilotRegistrationResponse parseRegistrationResponse(const std::string& response_body);
+/** @brief heartbeat request를 serialize한다. */
+std::string serializeHeartbeatRequest(std::uint64_t sequence);
+/** @brief coarse state update request를 serialize한다. */
+std::string serializeStateUpdateRequest(std::uint64_t sequence, const PilotCommonState& state);
+/** @brief empty disconnect request를 serialize한다. */
+std::string serializeDisconnectRequest();
 
 }  // namespace nodus_vision
 

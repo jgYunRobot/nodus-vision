@@ -252,4 +252,25 @@ PilotRegistrationResponse parseRegistrationResponse(const std::string& response_
     return response;
 }
 
+std::string serializeHeartbeatRequest(std::uint64_t sequence) {
+    if (sequence > MAX_INT64_VALUE) {
+        throw std::invalid_argument("Heartbeat sequence exceeds the public range.");
+    }
+    boost::json::object result;
+    result["sequence"] = sequence;
+    return boost::json::serialize(result);
+}
+
+std::string serializeStateUpdateRequest(std::uint64_t sequence, const PilotCommonState& state) {
+    if (sequence > MAX_INT64_VALUE) {
+        throw std::invalid_argument("State sequence exceeds the public range.");
+    }
+    boost::json::object result;
+    result["sequence"] = sequence;
+    result["state"] = serializeCommonState(state);
+    return boost::json::serialize(result);
+}
+
+std::string serializeDisconnectRequest() { return "{}"; }
+
 }  // namespace nodus_vision
