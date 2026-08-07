@@ -33,6 +33,9 @@ struct RecordingStatus {
     std::uint64_t recording_drop_count{0U};
 };
 
+enum class RecordingStartResult { e_STARTED, e_REPLAYED };
+enum class RecordingStopResult { e_FINALIZED, e_REPLAYED };
+
 /** @brief capture path와 FFmpeg writer를 bounded queue로 분리하는 sole lifecycle owner다. */
 class RecordingManager {
    public:
@@ -43,10 +46,14 @@ class RecordingManager {
 
     /** @brief new staging artifact와 writer worker를 준비한다. */
     void start(const RecordingStartRequest& request);
+    /** @brief exact request replay를 distinguish하며 start를 수행한다. */
+    RecordingStartResult startOrReplay(const RecordingStartRequest& request);
     /** @brief capture thread를 기다리지 않고 immutable frame을 admission한다. */
     bool trySubmitFrame(std::shared_ptr<const CapturedFrame> frame) noexcept;
     /** @brief admission을 닫고 bounded queue를 drain한 staging artifact를 close한다. */
     void finalize();
+    /** @brief exact stop replay를 distinguish하며 staging writer를 close한다. */
+    RecordingStopResult finalizeOrReplay(const RecordingStartRequest& request);
     /** @return recording owner의 consistent public counters다. */
     RecordingStatus getStatus() const;
 

@@ -44,8 +44,15 @@ class RecordingManager::Impl {
         }
     }
 
-    void start(const RecordingStartRequest& request) {
+    RecordingStartResult startOrReplay(const RecordingStartRequest& request) {
         std::lock_guard<std::mutex> lock(m_mutex);
+        const std::string canonical = serializeRecordingStartRequest(request);
+        if (request.request_id == m_start_request_id) {
+            if (canonical == m_start_canonical) {
+                return RecordingStartResult::e_REPLAYED;
+            }
+            throw std::runtime_error("Recording request ID was reused with different content.");
+        }
         if (m_state == RecordingState::e_PREPARING || m_state == RecordingState::e_RECORDING ||
             m_state == RecordingState::e_FINALIZING) {
             throw std::runtime_error("A recording is already active.");
@@ -63,6 +70,8 @@ class RecordingManager::Impl {
                 paths.staging_directory / "frames.jsonl", request.recording_id,
                 m_config.sensor_frame, m_config.calibration_id);
             m_recording_id = request.recording_id;
+            m_start_request_id = request.request_id;
+            m_start_canonical = canonical;
             m_admitted_frame_count = 0U;
             m_submitted_frame_count = 0U;
             m_recording_drop_count = 0U;
@@ -75,6 +84,7 @@ class RecordingManager::Impl {
             m_worker = std::thread(&Impl::runWorker, this);
             m_state = RecordingState::e_RECORDING;
             m_admitting.store(true, std::memory_order_release);
+            return RecordingStartResult::e_STARTED;
         } catch (...) {
             m_state = RecordingState::e_FAULTED;
             m_admitting.store(false, std::memory_order_release);
@@ -142,6 +152,34 @@ class RecordingManager::Impl {
         }
     }
 
+    RecordingStopResult finalizeOrReplay(const RecordingStartRequest& request) {
+        if (!isRecordingRequestIdValid(request.request_id) ||
+            !isRecordingIdValid(request.recording_id)) {
+            throw std::invalid_argument("Recording stop request has an unsafe identity.");
+        }
+        const std::string canonical = "{\"schema_version\":1,\"request_id\":\"" +
+                                      request.request_id + "\",\"recording_id\":\"" +
+                                      request.recording_id + "\"}";
+        {
+            std::lock_guard<std::mutex> lock(m_mutex);
+            if (request.request_id == m_stop_request_id) {
+                if (canonical == m_stop_canonical) {
+                    return RecordingStopResult::e_REPLAYED;
+                }
+                throw std::runtime_error(
+                    "Recording stop request ID was reused with different content.");
+            }
+            if (request.recording_id != m_recording_id) {
+                throw std::runtime_error("Recording is unknown.");
+            }
+        }
+        finalize();
+        std::lock_guard<std::mutex> lock(m_mutex);
+        m_stop_request_id = request.request_id;
+        m_stop_canonical = canonical;
+        return RecordingStopResult::e_FINALIZED;
+    }
+
     RecordingStatus getStatus() const {
         std::lock_guard<std::mutex> lock(m_mutex);
         return {m_state, m_recording_id, m_admitted_frame_count, m_submitted_frame_count,
@@ -203,6 +241,10 @@ class RecordingManager::Impl {
     std::unique_ptr<ColorVideoWriter> m_writer;
     std::unique_ptr<RecordingSidecarWriter> m_sidecar;
     std::string m_recording_id;
+    std::string m_start_request_id;
+    std::string m_start_canonical;
+    std::string m_stop_request_id;
+    std::string m_stop_canonical;
     FrameIdentity m_last_identity;
     std::size_t m_queue_head{0U};
     std::size_t m_queue_tail{0U};
@@ -220,11 +262,19 @@ class RecordingManager::Impl {
 RecordingManager::RecordingManager(RecordingManagerConfig config)
     : m_p_impl(std::make_unique<Impl>(std::move(config))) {}
 RecordingManager::~RecordingManager() = default;
-void RecordingManager::start(const RecordingStartRequest& request) { m_p_impl->start(request); }
+void RecordingManager::start(const RecordingStartRequest& request) {
+    m_p_impl->startOrReplay(request);
+}
+RecordingStartResult RecordingManager::startOrReplay(const RecordingStartRequest& request) {
+    return m_p_impl->startOrReplay(request);
+}
 bool RecordingManager::trySubmitFrame(std::shared_ptr<const CapturedFrame> frame) noexcept {
     return m_p_impl->trySubmitFrame(std::move(frame));
 }
 void RecordingManager::finalize() { m_p_impl->finalize(); }
+RecordingStopResult RecordingManager::finalizeOrReplay(const RecordingStartRequest& request) {
+    return m_p_impl->finalizeOrReplay(request);
+}
 RecordingStatus RecordingManager::getStatus() const { return m_p_impl->getStatus(); }
 
 }  // namespace nodus_vision

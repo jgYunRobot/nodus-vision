@@ -84,6 +84,15 @@ ProviderHttpRoutes makeRoutes(std::shared_ptr<const ProviderStreamFrame>* p_curr
             200, "application/json", "{\"valid\":true}", {{"X-Nodus-Frame-Number", "9"}}};
     };
     routes.post_pixel_point = routes.post_roi_depth;
+    routes.post_recording_start = [](const std::string& body) {
+        return ProviderHttpResponse{201, "application/json", body};
+    };
+    routes.post_recording_stop = [](const std::string& body) {
+        return ProviderHttpResponse{202, "application/json", body};
+    };
+    routes.get_recording_current = []() {
+        return ProviderHttpResponse{200, "application/json", "{\"state\":\"idle\"}"};
+    };
     routes.get_color_stream_frame = [p_current_stream_frame]() {
         return std::atomic_load(p_current_stream_frame);
     };
@@ -188,6 +197,15 @@ TEST(ProviderHttpServer, PreservesRoutePayloadHeadersAndNoStoreResponses) {
         requestResponse(server.getBoundPort(), http::verb::get, "/snapshot/color");
     EXPECT_EQ(snapshot.result(), http::status::service_unavailable);
     EXPECT_EQ(snapshot[http::field::cache_control], "no-store");
+
+    const http::response<http::string_body> recording_start =
+        requestResponse(server.getBoundPort(), http::verb::post, "/recordings/start",
+                        "{\"request_id\":\"start-001\"}");
+    EXPECT_EQ(recording_start.result(), http::status::created);
+    const http::response<http::string_body> recording_current =
+        requestResponse(server.getBoundPort(), http::verb::get, "/recordings/current");
+    EXPECT_EQ(recording_current.result(), http::status::ok);
+    EXPECT_NE(recording_current.body().find("idle"), std::string::npos);
     server.stopServer();
 }
 

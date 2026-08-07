@@ -142,12 +142,17 @@ class HttpSession final : public std::enable_shared_from_this<HttpSession> {
 
         const bool is_roi_route = target == "/query/roi_depth";
         const bool is_pixel_route = target == "/query/pixel_to_point";
-        if ((is_roi_route || is_pixel_route) && request.method() != http::verb::post) {
+        const bool is_recording_start_route = target == "/recordings/start";
+        const bool is_recording_stop_route = target == "/recordings/stop";
+        const bool is_recording_post_route = is_recording_start_route || is_recording_stop_route;
+        if ((is_roi_route || is_pixel_route || is_recording_post_route) &&
+            request.method() != http::verb::post) {
             sendResponse(
                 makeErrorResponse(405, "method_not_allowed", "Method is not allowed.", false));
             return;
         }
-        if (!is_roi_route && !is_pixel_route && request.method() != http::verb::get) {
+        if (!is_roi_route && !is_pixel_route && !is_recording_post_route &&
+            request.method() != http::verb::get) {
             sendResponse(
                 makeErrorResponse(405, "method_not_allowed", "Method is not allowed.", false));
             return;
@@ -158,6 +163,12 @@ class HttpSession final : public std::enable_shared_from_this<HttpSession> {
                 sendResponse(m_routes.post_roi_depth(request.body()));
             } else if (is_pixel_route && m_routes.post_pixel_point) {
                 sendResponse(m_routes.post_pixel_point(request.body()));
+            } else if (is_recording_start_route && m_routes.post_recording_start) {
+                sendResponse(m_routes.post_recording_start(request.body()));
+            } else if (is_recording_stop_route && m_routes.post_recording_stop) {
+                sendResponse(m_routes.post_recording_stop(request.body()));
+            } else if (target == "/recordings/current" && m_routes.get_recording_current) {
+                sendResponse(m_routes.get_recording_current());
             } else if (target == "/health" && m_routes.get_health) {
                 sendResponse(m_routes.get_health());
             } else if (target == "/metadata" && m_routes.get_metadata) {

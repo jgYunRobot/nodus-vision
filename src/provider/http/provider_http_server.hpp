@@ -46,6 +46,9 @@ struct ProviderHttpRoutes {
     std::function<ProviderHttpResponse()> get_pointcloud_snapshot;
     std::function<ProviderHttpResponse(const std::string&)> post_roi_depth;
     std::function<ProviderHttpResponse(const std::string&)> post_pixel_point;
+    std::function<ProviderHttpResponse(const std::string&)> post_recording_start;
+    std::function<ProviderHttpResponse(const std::string&)> post_recording_stop;
+    std::function<ProviderHttpResponse()> get_recording_current;
     std::function<std::shared_ptr<const ProviderStreamFrame>()> get_color_stream_frame;
     std::function<std::shared_ptr<const ProviderStreamFrame>()> get_depth_stream_frame;
 };

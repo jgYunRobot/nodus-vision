@@ -90,6 +90,17 @@ TEST(RecordingManager, RejectsFrameWhenNotRecording) {
     EXPECT_FALSE(manager.trySubmitFrame(std::make_shared<RgbFrame>(1U, 1U)));
 }
 
+TEST(RecordingManager, ReplaysOnlyTheExactAcceptedStartRequest) {
+    TemporaryRecordingDirectory directory;
+    RecordingManager manager(makeConfig(directory.getPath()));
+    const RecordingStartRequest request{"start-001", "episode-0001-front", ""};
+    EXPECT_EQ(manager.startOrReplay(request), RecordingStartResult::e_STARTED);
+    EXPECT_EQ(manager.startOrReplay(request), RecordingStartResult::e_REPLAYED);
+    EXPECT_THROW(manager.startOrReplay({"start-001", "different-id", ""}), std::runtime_error);
+    manager.finalize();
+    EXPECT_EQ(manager.startOrReplay(request), RecordingStartResult::e_REPLAYED);
+}
+
 TEST(RecordingManager, FaultsRatherThanMixingCaptureGenerations) {
     TemporaryRecordingDirectory directory;
     RecordingManager manager(makeConfig(directory.getPath()));

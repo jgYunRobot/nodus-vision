@@ -28,6 +28,7 @@
 #include "pilot_integration_client.hpp"
 #include "provider_http_server.hpp"
 #include "query_serializer.hpp"
+#include "recording_manager.hpp"
 
 namespace nodus_vision {
 namespace {
@@ -50,6 +51,79 @@ struct PixelRequest {
     int x{0};
     int y{0};
 };
+
+RecordingStartRequest parseRecordingStartRequest(const std::string& body,
+                                                 const VisionConfig& config) {
+    const boost::json::value parsed = boost::json::parse(body);
+    if (!parsed.is_object()) {
+        throw std::invalid_argument("Recording start request must be an object.");
+    }
+    const boost::json::object& request = parsed.as_object();
+    if (request.size() != 6U || request.at("schema_version").to_number<int>() != 1 ||
+        request.at("expected_device_id").as_string() != config.device_id ||
+        request.at("expected_calibration_id").as_string() != config.calibration.calibration_id ||
+        !request.at("expected_profile").is_object()) {
+        throw std::invalid_argument("Recording start request shape is invalid.");
+    }
+    const boost::json::object& profile = request.at("expected_profile").as_object();
+    const int width = config.adapter == "fake" ? config.fake.width : config.intel_d435.color_width;
+    const int height =
+        config.adapter == "fake" ? config.fake.height : config.intel_d435.color_height;
+    const int fps = config.adapter == "fake" ? config.fake.fps : config.intel_d435.color_fps;
+    if (profile.size() != 4U || profile.at("width").to_number<int>() != width ||
+        profile.at("height").to_number<int>() != height ||
+        profile.at("fps").to_number<int>() != fps ||
+        profile.at("pixel_format").as_string() != "rgb24") {
+        throw std::invalid_argument("Recording expected profile does not match Vision.");
+    }
+    return {std::string(request.at("request_id").as_string()),
+            std::string(request.at("recording_id").as_string()), body};
+}
+
+RecordingStartRequest parseRecordingStopRequest(const std::string& body) {
+    const boost::json::value parsed = boost::json::parse(body);
+    if (!parsed.is_object()) {
+        throw std::invalid_argument("Recording stop request must be an object.");
+    }
+    const boost::json::object& request = parsed.as_object();
+    if (request.size() != 3U || request.at("schema_version").to_number<int>() != 1) {
+        throw std::invalid_argument("Recording stop request shape is invalid.");
+    }
+    return {std::string(request.at("request_id").as_string()),
+            std::string(request.at("recording_id").as_string()), body};
+}
+
+const char* toString(RecordingState state) noexcept {
+    switch (state) {
+        case RecordingState::e_DISABLED:
+            return "disabled";
+        case RecordingState::e_IDLE:
+            return "idle";
+        case RecordingState::e_PREPARING:
+            return "preparing";
+        case RecordingState::e_RECORDING:
+            return "recording";
+        case RecordingState::e_FINALIZING:
+            return "finalizing";
+        case RecordingState::e_FINALIZED:
+            return "finalized";
+        case RecordingState::e_FAULTED:
+            return "faulted";
+    }
+    return "faulted";
+}
+
+std::string makeRecordingCurrentJson(const RecordingStatus& status) {
+    boost::json::object root;
+    root["schema_version"] = 1;
+    root["state"] = toString(status.state);
+    root["recording_id"] = status.recording_id.empty() ? boost::json::value(nullptr)
+                                                       : boost::json::value(status.recording_id);
+    root["admitted_frame_count"] = status.admitted_frame_count;
+    root["submitted_frame_count"] = status.submitted_frame_count;
+    root["recording_drop_count"] = status.recording_drop_count;
+    return boost::json::serialize(root);
+}
 
 ProviderHttpResponse makeErrorResponse(int status, const std::string& code,
                                        const std::string& message, bool retryable) {
@@ -217,6 +291,7 @@ class VisionApplication::Impl {
     std::unique_ptr<CameraAdapter> m_p_adapter;
     std::unique_ptr<ProviderHttpServer> m_p_server;
     std::unique_ptr<PilotIntegrationClient> m_p_pilot_client;
+    std::unique_ptr<RecordingManager> m_p_recording_manager;
     FrameStore m_frame_store;
     EncodedPreviewCache m_preview_cache;
     std::thread m_capture_thread;
@@ -253,6 +328,21 @@ void VisionApplication::startApplication() {
     }
 
     const std::chrono::milliseconds max_frame_age(m_p_impl->m_config.provider.max_frame_age_ms);
+    if (m_p_impl->m_config.recording.enabled) {
+        const StreamProfile color_profile =
+            m_p_impl->m_config.adapter == "fake"
+                ? StreamProfile{m_p_impl->m_config.fake.width, m_p_impl->m_config.fake.height,
+                                m_p_impl->m_config.fake.fps, PixelFormat::e_RGB8}
+                : StreamProfile{m_p_impl->m_config.intel_d435.color_width,
+                                m_p_impl->m_config.intel_d435.color_height,
+                                m_p_impl->m_config.intel_d435.color_fps, PixelFormat::e_RGB8};
+        m_p_impl->m_p_recording_manager = std::make_unique<RecordingManager>(RecordingManagerConfig{
+            m_p_impl->m_config.recording.root,
+            static_cast<std::size_t>(m_p_impl->m_config.recording.queue_capacity_frames),
+            color_profile.width, color_profile.height, color_profile.fps,
+            m_p_impl->m_config.recording.bit_rate_bps, m_p_impl->m_config.calibration.sensor_frame,
+            m_p_impl->m_config.calibration.calibration_id});
+    }
     ProviderHttpRoutes routes;
     routes.get_health = [this]() {
         return ProviderHttpResponse{
@@ -261,6 +351,59 @@ void VisionApplication::startApplication() {
     routes.get_metadata = [this]() {
         return ProviderHttpResponse{
             200, "application/json", makeMetadataJson(m_p_impl->m_config), {}};
+    };
+    routes.post_recording_start = [this](const std::string& body) {
+        if (m_p_impl->m_p_recording_manager == nullptr) {
+            return makeErrorResponse(503, "recording_disabled", "Recording is disabled.", false);
+        }
+        try {
+            const RecordingStartResult result = m_p_impl->m_p_recording_manager->startOrReplay(
+                parseRecordingStartRequest(body, m_p_impl->m_config));
+            return ProviderHttpResponse{result == RecordingStartResult::e_STARTED ? 201 : 200,
+                                        "application/json",
+                                        "{\"schema_version\":1}",
+                                        {}};
+        } catch (const std::invalid_argument&) {
+            return makeErrorResponse(400, "invalid_request", "Recording request is invalid.",
+                                     false);
+        } catch (const std::exception&) {
+            return makeErrorResponse(409, "recording_conflict", "Recording request conflicts.",
+                                     false);
+        }
+    };
+    routes.post_recording_stop = [this](const std::string& body) {
+        if (m_p_impl->m_p_recording_manager == nullptr) {
+            return makeErrorResponse(503, "recording_disabled", "Recording is disabled.", false);
+        }
+        try {
+            const RecordingStartRequest request = parseRecordingStopRequest(body);
+            if (m_p_impl->m_p_recording_manager->getStatus().recording_id != request.recording_id) {
+                return makeErrorResponse(404, "recording_not_found", "Recording is unknown.",
+                                         false);
+            }
+            const RecordingStopResult result =
+                m_p_impl->m_p_recording_manager->finalizeOrReplay(request);
+            return ProviderHttpResponse{result == RecordingStopResult::e_FINALIZED ? 202 : 200,
+                                        "application/json",
+                                        "{\"schema_version\":1}",
+                                        {}};
+        } catch (const std::invalid_argument&) {
+            return makeErrorResponse(400, "invalid_request", "Recording request is invalid.",
+                                     false);
+        } catch (const std::exception&) {
+            return makeErrorResponse(409, "recording_conflict", "Recording cannot stop.", false);
+        }
+    };
+    routes.get_recording_current = [this]() {
+        if (m_p_impl->m_p_recording_manager == nullptr) {
+            return ProviderHttpResponse{
+                200, "application/json", "{\"schema_version\":1,\"state\":\"disabled\"}", {}};
+        }
+        return ProviderHttpResponse{
+            200,
+            "application/json",
+            makeRecordingCurrentJson(m_p_impl->m_p_recording_manager->getStatus()),
+            {}};
     };
     if (isColorEnabled(m_p_impl->m_config)) {
         routes.get_color_snapshot = [this, max_frame_age]() {
@@ -444,6 +587,9 @@ void VisionApplication::startApplication() {
                         m_p_impl->m_p_adapter->readFrame(
                             std::chrono::milliseconds(CAPTURE_TIMEOUT_MS));
                     m_p_impl->m_frame_store.publishFrame(frame);
+                    if (m_p_impl->m_p_recording_manager != nullptr) {
+                        m_p_impl->m_p_recording_manager->trySubmitFrame(frame);
+                    }
                     if (throttle_fake) {
                         std::this_thread::sleep_for(fake_frame_period);
                     }
@@ -507,6 +653,12 @@ void VisionApplication::stopApplication() noexcept {
     }
     if (m_p_impl->m_encoder_thread.joinable()) {
         m_p_impl->m_encoder_thread.join();
+    }
+    if (m_p_impl->m_p_recording_manager != nullptr) {
+        try {
+            m_p_impl->m_p_recording_manager->finalize();
+        } catch (const std::exception&) {
+        }
     }
     if (p_adapter != nullptr) {
         p_adapter->stopStream();

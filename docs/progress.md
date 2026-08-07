@@ -1,5 +1,26 @@
 # Progress
 
+## 2026-08-08 - Phase 5 P5-4 recording HTTP lifecycle gate
+
+### Changes
+
+- Added direct provider `POST /recordings/start`, `POST /recordings/stop`, and `GET /recordings/current`
+  callbacks without exposing artifact bytes or adding a Pilot payload path.
+- Start strictly validates device, calibration, RGB24 profile, and idempotency identity before opening a
+  staging artifact. Stop and start replay exact request IDs; conflicting reuse fails closed.
+- Enabled recording owns a bounded manager in the Vision application and capture only attempts its
+  non-blocking frame admission; shutdown drains/finalizes the manager before camera teardown.
+
+### Status
+
+- P5-4 is complete. P5-5 is next: checksum-backed manifest validation and atomic staging-to-finalized
+  activation. No Pilot catalog changes, MetaGate fixture, physical camera, or payload relay was added.
+
+### Validation
+
+- `integration_test_application_lifecycle` passed with a 64x64 fake camera and temporary absolute
+  artifact root, covering direct HTTP start 201, start replay 200, stop 202, stop replay 200, and shutdown.
+
 ## 2026-08-08 - Phase 5 P5-3 sidecar and bounded manager gate
 
 ### Changes

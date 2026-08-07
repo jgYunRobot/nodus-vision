@@ -11,6 +11,8 @@
 #include <boost/beast/http.hpp>
 #include <boost/json.hpp>
 #include <chrono>
+#include <cstdlib>
+#include <filesystem>
 #include <memory>
 #include <string>
 #include <thread>
@@ -36,6 +38,31 @@ VisionConfig makeFakeConfig() {
     config.calibration.sensor_frame = "fake_optical";
     config.calibration.mount_frame = "fake_mount";
     config.provider = {"127.0.0.1", 0, "http://127.0.0.1:8900", 4, 1, 1000, 8192, 4096, 1000};
+    return config;
+}
+
+class TemporaryRecordingRoot {
+   public:
+    TemporaryRecordingRoot() {
+        char template_path[] = "/tmp/nodus-vision-recording-http-XXXXXX";
+        char* created = mkdtemp(template_path);
+        if (created == nullptr) {
+            throw std::runtime_error("Cannot create temporary recording root.");
+        }
+        m_path = created;
+    }
+    ~TemporaryRecordingRoot() { std::filesystem::remove_all(m_path); }
+    const std::filesystem::path& getPath() const { return m_path; }
+
+   private:
+    std::filesystem::path m_path;
+};
+
+VisionConfig makeRecordingConfig(const std::filesystem::path& root) {
+    VisionConfig config = makeFakeConfig();
+    config.fake.width = 64;
+    config.fake.height = 64;
+    config.recording = {true, root.string(), 4, 10000, 1U, 1000, 100000, "veryfast", "zerolatency"};
     return config;
 }
 
@@ -279,6 +306,29 @@ TEST(VisionApplication, RecoversPilotRestartWithoutRestartingProviderOrCapture) 
     EXPECT_EQ(application.getBoundPort(), provider_port);
     EXPECT_EQ(application.getHealthSnapshot().camera.latest_identity.capture_generation,
               capture_generation);
+    application.stopApplication();
+}
+
+TEST(VisionApplication, RecordsThroughDirectHttpLifecycle) {
+    TemporaryRecordingRoot root;
+    VisionApplication application(makeRecordingConfig(root.getPath()));
+    application.startApplication();
+    const int port = application.getBoundPort();
+    const std::string start =
+        "{\"schema_version\":1,\"request_id\":\"start-001\",\"recording_id\":\"episode-0001-"
+        "front\",\"expected_device_id\":\"fake\",\"expected_calibration_id\":\"fake_calibration\","
+        "\"expected_profile\":{\"width\":64,\"height\":64,\"fps\":30,\"pixel_format\":\"rgb24\"}}";
+    EXPECT_EQ(requestResponse(port, http::verb::post, "/recordings/start", start).result(),
+              http::status::created);
+    EXPECT_EQ(requestResponse(port, http::verb::post, "/recordings/start", start).result(),
+              http::status::ok);
+    const std::string stop =
+        "{\"schema_version\":1,\"request_id\":\"stop-001\",\"recording_id\":\"episode-0001-"
+        "front\"}";
+    EXPECT_EQ(requestResponse(port, http::verb::post, "/recordings/stop", stop).result(),
+              http::status::accepted);
+    EXPECT_EQ(requestResponse(port, http::verb::post, "/recordings/stop", stop).result(),
+              http::status::ok);
     application.stopApplication();
 }
 
