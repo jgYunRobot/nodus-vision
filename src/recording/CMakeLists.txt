@@ -2,6 +2,8 @@ add_library(
     nodus_vision_recording
     STATIC
     recording_contracts.cpp
+    recording_manifest.cpp
+    recording_manager.cpp
     recording_store.cpp
     color_video_writer.cpp
 )

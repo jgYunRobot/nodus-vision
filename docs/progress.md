@@ -1,5 +1,30 @@
 # Progress
 
+## 2026-08-08 - Phase 5 P5-3 sidecar and bounded manager gate
+
+### Changes
+
+- Added a compact, versioned append-only `frames.jsonl` writer with contiguous video indexes,
+  sequential PTS, strict `(capture_generation, frame_number)` ordering, immutable capture timestamps,
+  and a required trailing newline.
+- Added a worker-owned recording manager with a preallocated bounded ring. Capture admission uses
+  `try_lock`, so mutex contention and full capacity drop the current frame without waiting; both are
+  reflected in the recording drop counter.
+- The worker retains only immutable `CapturedFrame` owners, writes color input before its one matching
+  sidecar entry, drains on finalize, and faults instead of mixing a changed capture generation.
+
+### Status
+
+- P5-3 is complete. P5-4 is next: idempotent HTTP start/stop/current lifecycle over this manager.
+  Artifacts remain staging-only; manifest generation and atomic final activation remain P5-5 work.
+
+### Validation
+
+- Recording CTest selection passed (5/5). `recording_test_manager` also passed 10 consecutive runs,
+  covering staging drain, disabled admission, generation fault, and non-blocking overflow drops.
+- `clang-format-18` (host version 18.1.3) formatted the changed C++ files and `git diff --check`
+  passed. No physical camera, external Pilot process, or payload relay was used.
+
 ## 2026-08-08 - Phase 5 P5-2 FFmpeg color writer gate
 
 ### Changes
