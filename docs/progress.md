@@ -1,5 +1,34 @@
 # Progress
 
+## 2026-08-08 - Phase 5 P5-2 FFmpeg color writer gate
+
+### Changes
+
+- Added the worker-owned `ColorVideoWriter`: packed RGB24 input is converted to YUV420P and
+  encoded into an MP4/H.264 stream through the runtime-resolved `libx264` encoder.
+- Fixed the stream profile to the configured dimensions, FPS time base, one-second GOP, zero
+  B-frames, strict bitrate, `veryfast` preset, and `zerolatency` tune. Submitted frame indexes are
+  sequential PTS values with an explicit one-frame duration.
+- Added CMake linkage for only `libavformat`, `libavcodec`, `libavutil`, and `libswscale`; no direct
+  `x264.pc` dependency was added. Constructor, finalization, flush, trailer, and cleanup paths fail
+  closed on FFmpeg errors.
+- Added linked-FFmpeg synthetic MP4 validation for 1, 2, and 5 submitted frames, including H.264,
+  YUV420P, dimensions, packet presence, and decoder-visible frame count checks.
+
+### Status
+
+- P5-2 is complete. P5-3 remains the next gate: versioned sidecar lines and the bounded recording
+  manager. No recording HTTP lifecycle, final artifact activation, Pilot descriptor, MetaGate
+  fixture, physical camera, or external Pilot process was added.
+
+### Validation
+
+- `cmake --build build/debug --target recording_test_contracts recording_test_store
+  recording_test_color_video_writer -j2` and the matching CTest selection passed (3/3).
+- `clang-format-18` (host version 18.1.3) formatted changed C++ files and `git diff --check`
+  passed. The decoder check uses the linked FFmpeg libraries; no shell `ffprobe` or physical camera
+  was used.
+
 ## 2026-08-08 - Phase 5 P5-0 FFmpeg provenance gate
 
 ### Changes
