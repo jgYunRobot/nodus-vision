@@ -1,5 +1,23 @@
 # Progress
 
+## 2026-08-07 - Phase 3 immutable query semantics checkpoint
+
+### Changes
+
+- Added deterministic fake-adapter coverage for invalid pixel result identity, explicit invalid-depth
+  reason, and clamped ROI geometry on the same immutable captured frame.
+
+### Status
+
+- Query value semantics are fixed before adding the direct POST route adapter. Phase 3 remains in
+  progress; route parsing, depth preview/MJPEG, and slow-client acceptance are not complete.
+
+### Validation
+
+- `cmake --build --preset debug` and `ctest --test-dir build/debug --output-on-failure` passed
+  11/11 hardware-independent tests.
+- No physical camera or external component access was attempted.
+
 ## 2026-08-07 - Phase 3 JPEG and binary snapshot checkpoint
 
 ### Changes

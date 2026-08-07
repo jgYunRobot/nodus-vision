@@ -55,4 +55,23 @@ TEST(FakeCameraAdapter, RequiresCallerAdvanceInManualMode)
     adapter.disconnectCamera();
 }
 
+TEST(FakeCameraAdapter, PreservesIdentityForInvalidPixelAndClampedRoi)
+{
+    FakeCameraAdapter adapter({4, 3, 30, 1U, 1U, true, false, false, "fake"});
+    adapter.connectCamera();
+    adapter.startStream();
+    const std::shared_ptr<const CapturedFrame> frame = adapter.readFrame(std::chrono::milliseconds(1));
+    const std::optional<PixelPointResult> invalid = frame->queryPixelPoint(-1, 0);
+    ASSERT_TRUE(invalid.has_value());
+    EXPECT_FALSE(invalid->valid);
+    EXPECT_EQ(invalid->invalid_reason, "pixel_out_of_bounds");
+    EXPECT_EQ(invalid->identity.frame_number, frame->getSnapshot().identity.frame_number);
+    const RoiDepthResult roi = frame->queryDepthInRoi(3, 2, 3, 3);
+    EXPECT_EQ(roi.clamped_roi.x, 3);
+    EXPECT_EQ(roi.clamped_roi.y, 2);
+    EXPECT_EQ(roi.clamped_roi.width, 1);
+    EXPECT_EQ(roi.clamped_roi.height, 1);
+    EXPECT_EQ(roi.identity.frame_number, frame->getSnapshot().identity.frame_number);
+}
+
 } // namespace nodus_vision
