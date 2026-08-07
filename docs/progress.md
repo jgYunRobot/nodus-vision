@@ -1,5 +1,25 @@
 # Progress
 
+## 2026-08-08 - Phase 5 P5-0 FFmpeg provenance gate
+
+### Changes
+
+- Recorded the host FFmpeg 6.1.1 component versions, GPL-enabled `libx264` encoder availability,
+  package provenance, CMake linkage plan, and libavutil SHA-256 API decision in the migration
+  ledger.
+
+### Status
+
+- P5-0 is complete: R4 is closed and the host can provide the required encoder through FFmpeg.
+- No recording source, FFmpeg CMake linkage, writer, provider route, artifact directory, or
+  filesystem output was added at this checkpoint.
+
+### Validation
+
+- `pkg-config` resolved `libavformat`, `libavcodec`, `libavutil`, and `libswscale`; FFmpeg listed
+  both `libx264` and `libx264rgb`. The direct `x264.pc` module is intentionally absent and is not
+  a P5 build requirement.
+
 ## 2026-08-08 - Phase 4 R4 remediation acceptance
 
 ### Changes

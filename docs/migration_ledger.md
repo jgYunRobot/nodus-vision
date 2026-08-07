@@ -66,3 +66,24 @@ PA-CONTROL.
 
 The pinned source is configured through a CMake `ExternalProject` because upstream explicitly does
 not support `add_subdirectory()` integration. Vision links its generated static `libjpeg.a` directly.
+
+## Phase 5 recording dependency gate
+
+P5-0 observed the Ubuntu host development packages `libavformat-dev`, `libavcodec-dev`,
+`libavutil-dev`, and `libswscale-dev` at package version `7:6.1.1-3ubuntu5+esm10`. Their
+`pkg-config` component versions are `60.16.100`, `60.31.102`, `58.29.100`, and `7.5.100`,
+respectively. The resolved link line is `-lavformat -lavcodec -lavutil -lswscale`; it does not
+reference a PA-CONTROL checkout.
+
+The host FFmpeg executable is `6.1.1-3ubuntu5+esm10`, built with `--enable-gpl` and
+`--enable-libx264`; it advertises both `libx264` and `libx264rgb` encoders. The runtime package
+`libx264-164` is `2:0.164.3108+git31e19f9-1`; its installed copyright metadata identifies x264 as
+GPL-2+ (with a separate commercial option). The installed FFmpeg copyright metadata states that
+the Debian/Ubuntu GPL-enabled build is GPL-2+ or later. Any redistributed recording build must
+complete the corresponding GPL source/license review before release.
+
+There is no host `x264.pc`, so the recording target must not require a direct x264 pkg-config
+module. P5-2 will resolve only the four FFmpeg components with an imported pkg-config target and
+will fail closed at runtime unless `avcodec_find_encoder_by_name("libx264")` succeeds. SHA-256 is
+assigned to the linked libavutil `AVSHA` API (`av_sha_init(..., 256)`, `av_sha_update`, and
+`av_sha_final`) with bounded finalize-worker reads; no shell checksum process is permitted.
