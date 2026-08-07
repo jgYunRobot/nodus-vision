@@ -6,6 +6,27 @@ info:
     Trusted same-host or LAN camera payload API. Component discovery is handled separately by
     Nodus Pilot; image, depth, query, and point-cloud payloads are served directly by Vision.
 security: []
+x-pilot-endpoint-catalog-schema-ids:
+  health:
+    response_schema_id: nodus.vision.health.response.v1
+  metadata:
+    response_schema_id: nodus.vision.metadata.response.v1
+  color-preview:
+    response_schema_id: nodus.vision.mjpeg.color_part.v1
+  depth-preview:
+    response_schema_id: nodus.vision.mjpeg.depth_part.v1
+  color-snapshot:
+    response_schema_id: nodus.vision.jpeg.color.v1
+  depth-snapshot:
+    response_schema_id: nodus.vision.jpeg.depth_preview.v1
+  roi-depth:
+    request_schema_id: nodus.vision.roi_depth.request.v1
+    response_schema_id: nodus.vision.roi_depth.response.v1
+  pixel-to-point:
+    request_schema_id: nodus.vision.pixel_point.request.v1
+    response_schema_id: nodus.vision.pixel_point.response.v1
+  pointcloud-binary:
+    response_schema_id: nodus.vision.pointcloud.pcd1.v2
 paths:
   /health:
     get:

@@ -13,7 +13,8 @@ constexpr const char* VALID_CONFIG = R"json({
   "component_id": "camera.fake_top",
   "device": {"adapter": "fake", "fake": {"width": 4, "height": 3, "fps": 30, "start_frame_number": 1, "pattern_seed": 7}},
   "calibration": {"calibration_id": "fake_v1", "sensor_frame": "fake_optical", "mount_frame": "fake_mount", "camera_to_mount_matrix4x4": [1.0,0.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,0.0,1.0]},
-  "provider": {"bind_host": "127.0.0.1", "port": 0, "advertised_base_url": "http://127.0.0.1:8900", "max_connections": 4, "max_stream_clients": 2, "request_timeout_ms": 1000, "max_header_bytes": 8192, "max_body_bytes": 4096, "max_frame_age_ms": 1000}
+  "provider": {"bind_host": "127.0.0.1", "port": 0, "advertised_base_url": "http://127.0.0.1:8900", "max_connections": 4, "max_stream_clients": 2, "request_timeout_ms": 1000, "max_header_bytes": 8192, "max_body_bytes": 4096, "max_frame_age_ms": 1000},
+  "pilot": {"enabled": false, "base_url": "http://127.0.0.1:8765", "clock_domain": "monotonic_same_host", "connect_timeout_ms": 500, "request_timeout_ms": 1000, "max_response_bytes": 65536, "retry_initial_delay_ms": 100, "retry_max_delay_ms": 5000, "shutdown_timeout_ms": 1500}
 })json";
 
 }  // namespace
@@ -48,6 +49,36 @@ TEST(VisionConfig, RejectsInactiveAdapterAndHeaderControlCharacters) {
     control_character.replace(control_character.find("camera.fake_top"),
                               std::string("camera.fake_top").size(), "camera.fake_top\\ninvalid");
     EXPECT_THROW(parseVisionConfig(control_character), std::invalid_argument);
+}
+
+TEST(VisionConfig, RejectsInvalidPilotConfiguration) {
+    std::string invalid_url = VALID_CONFIG;
+    invalid_url.replace(invalid_url.find("http://127.0.0.1:8765"), 21U, "https://127.0.0.1:8765");
+    EXPECT_THROW(parseVisionConfig(invalid_url), std::invalid_argument);
+
+    std::string invalid_retry = VALID_CONFIG;
+    invalid_retry.replace(invalid_retry.find("\"retry_initial_delay_ms\": 100"), 29U,
+                          "\"retry_initial_delay_ms\": 5001");
+    EXPECT_THROW(parseVisionConfig(invalid_retry), std::invalid_argument);
+
+    std::string invalid_provider_port = VALID_CONFIG;
+    invalid_provider_port.replace(invalid_provider_port.find("\"port\": 0"), 9U, "\"port\": 8901");
+    EXPECT_THROW(parseVisionConfig(invalid_provider_port), std::invalid_argument);
+
+    std::string invalid_pilot_host = VALID_CONFIG;
+    invalid_pilot_host.replace(invalid_pilot_host.find("http://127.0.0.1:8765"), 21U,
+                               "http://:8765");
+    EXPECT_THROW(parseVisionConfig(invalid_pilot_host), std::invalid_argument);
+}
+
+TEST(VisionConfig, ParsesEnabledPilotConfiguration) {
+    std::string input = VALID_CONFIG;
+    input.replace(input.find("\"port\": 0"), 9U, "\"port\": 8900");
+    input.replace(input.find("\"enabled\": false"), 16U, "\"enabled\": true");
+    const VisionConfig config = parseVisionConfig(input);
+    EXPECT_TRUE(config.pilot.enabled);
+    EXPECT_EQ(config.pilot.clock_domain, "monotonic_same_host");
+    EXPECT_EQ(config.pilot.max_response_bytes, 65536);
 }
 
 }  // namespace nodus_vision

@@ -27,6 +27,19 @@ struct ProviderConfig {
     int max_frame_age_ms{0};
 };
 
+/** @brief Pilot public lifecycle client의 strict runtime bounds다. */
+struct PilotConfig {
+    bool enabled{false};
+    std::string base_url;
+    std::string clock_domain;
+    int connect_timeout_ms{0};
+    int request_timeout_ms{0};
+    int max_response_bytes{0};
+    int retry_initial_delay_ms{0};
+    int retry_max_delay_ms{0};
+    int shutdown_timeout_ms{0};
+};
+
 /** @brief immutable calibration configuration이다. */
 struct CalibrationConfig {
     std::string calibration_id;
@@ -45,6 +58,7 @@ struct VisionConfig {
     IntelD435AdapterConfig intel_d435;
     CalibrationConfig calibration;
     ProviderConfig provider;
+    PilotConfig pilot;
 };
 
 /** @brief JSON document를 strict typed VisionConfig로 parse한다. */
@@ -52,6 +66,6 @@ VisionConfig parseVisionConfig(const std::string& json_text);
 /** @brief schema file location을 반환한다. */
 std::string getVisionConfigSchemaPath();
 
-} // namespace nodus_vision
+}  // namespace nodus_vision
 
-#endif // NODUS_VISION_CONFIG_VISION_CONFIG_HPP_
+#endif  // NODUS_VISION_CONFIG_VISION_CONFIG_HPP_

@@ -78,8 +78,33 @@ void rejectUnknownFields(const boost::json::object& object,
 }
 
 bool isAdvertisedUrlValid(const std::string& url) {
-    return url.rfind("http://", 0U) == 0U && url.find("0.0.0.0") == std::string::npos &&
-           url.find("*") == std::string::npos;
+    if (url.rfind("http://", 0U) != 0U || url.find("0.0.0.0") != std::string::npos ||
+        url.find('*') != std::string::npos || url.find('@') != std::string::npos ||
+        url.find('?') != std::string::npos || url.find('#') != std::string::npos) {
+        return false;
+    }
+    const std::size_t authority_start = std::string("http://").size();
+    const std::size_t path_start = url.find('/', authority_start);
+    const std::string authority = url.substr(authority_start, path_start - authority_start);
+    const std::size_t port_separator = authority.rfind(':');
+    if (authority.empty() || port_separator == std::string::npos || port_separator == 0U ||
+        port_separator == authority.size() - 1U) {
+        return false;
+    }
+    for (std::size_t index = port_separator + 1U; index < authority.size(); ++index) {
+        if (authority.at(index) < '0' || authority.at(index) > '9') {
+            return false;
+        }
+    }
+    const int port = std::stoi(authority.substr(port_separator + 1U));
+    return port >= 1 && port <= 65535;
+}
+
+int getUrlPort(const std::string& url) {
+    const std::size_t authority_start = std::string("http://").size();
+    const std::size_t path_start = url.find('/', authority_start);
+    const std::string authority = url.substr(authority_start, path_start - authority_start);
+    return std::stoi(authority.substr(authority.rfind(':') + 1U));
 }
 
 }  // namespace
@@ -91,9 +116,10 @@ VisionConfig parseVisionConfig(const std::string& json_text) {
         throw std::invalid_argument("/: must be a JSON object.");
     }
     const boost::json::object& root = value.as_object();
-    rejectUnknownFields(
-        root, {"schema_version", "device_id", "component_id", "device", "calibration", "provider"},
-        "/");
+    rejectUnknownFields(root,
+                        {"schema_version", "device_id", "component_id", "device", "calibration",
+                         "provider", "pilot"},
+                        "/");
     VisionConfig config;
     config.schema_version = requireBoundedInt(root, "schema_version", "/schema_version", 1, 1);
     config.device_id = requireString(root, "device_id", "/device_id");
@@ -205,6 +231,46 @@ VisionConfig parseVisionConfig(const std::string& json_text) {
         requireBoundedInt(provider, "max_body_bytes", "/provider/max_body_bytes", 1, 10485760);
     config.provider.max_frame_age_ms =
         requireBoundedInt(provider, "max_frame_age_ms", "/provider/max_frame_age_ms", 1, 60000);
+    if (getUrlPort(config.provider.advertised_base_url) != config.provider.port) {
+        throw std::invalid_argument(
+            "/provider/advertised_base_url: port must match /provider/port.");
+    }
+    const boost::json::object& pilot = requireObject(root, "pilot", "/pilot");
+    rejectUnknownFields(pilot,
+                        {"enabled", "base_url", "clock_domain", "connect_timeout_ms",
+                         "request_timeout_ms", "max_response_bytes", "retry_initial_delay_ms",
+                         "retry_max_delay_ms", "shutdown_timeout_ms"},
+                        "/pilot");
+    const boost::json::value& enabled = requireField(pilot, "enabled", "/pilot/enabled");
+    if (!enabled.is_bool()) {
+        throw std::invalid_argument("/pilot/enabled: must be a boolean.");
+    }
+    config.pilot.enabled = enabled.as_bool();
+    config.pilot.base_url = requireString(pilot, "base_url", "/pilot/base_url");
+    if (!isAdvertisedUrlValid(config.pilot.base_url)) {
+        throw std::invalid_argument(
+            "/pilot/base_url: must be an absolute HTTP URL without userinfo, query, or fragment.");
+    }
+    config.pilot.clock_domain = requireString(pilot, "clock_domain", "/pilot/clock_domain");
+    if (config.pilot.clock_domain != "monotonic_same_host") {
+        throw std::invalid_argument("/pilot/clock_domain: only monotonic_same_host is supported.");
+    }
+    config.pilot.connect_timeout_ms =
+        requireBoundedInt(pilot, "connect_timeout_ms", "/pilot/connect_timeout_ms", 1, 60000);
+    config.pilot.request_timeout_ms =
+        requireBoundedInt(pilot, "request_timeout_ms", "/pilot/request_timeout_ms", 1, 60000);
+    config.pilot.max_response_bytes =
+        requireBoundedInt(pilot, "max_response_bytes", "/pilot/max_response_bytes", 1, 10485760);
+    config.pilot.retry_initial_delay_ms = requireBoundedInt(
+        pilot, "retry_initial_delay_ms", "/pilot/retry_initial_delay_ms", 1, 60000);
+    config.pilot.retry_max_delay_ms =
+        requireBoundedInt(pilot, "retry_max_delay_ms", "/pilot/retry_max_delay_ms", 1, 60000);
+    config.pilot.shutdown_timeout_ms =
+        requireBoundedInt(pilot, "shutdown_timeout_ms", "/pilot/shutdown_timeout_ms", 1, 60000);
+    if (config.pilot.retry_initial_delay_ms > config.pilot.retry_max_delay_ms) {
+        throw std::invalid_argument(
+            "/pilot/retry_initial_delay_ms: must not exceed /pilot/retry_max_delay_ms.");
+    }
     return config;
 }
 

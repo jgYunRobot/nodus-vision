@@ -1,5 +1,41 @@
 # Progress
 
+## 2026-08-08 - Phase 4 P4-1 configuration, DTO, and catalog
+
+### Changes
+
+- Added the required strict `pilot` configuration, disabled and enabled fake-camera examples, and
+  schema parity for HTTP-only Pilot URLs, bounded timeouts/retries, and `monotonic_same_host`.
+- Added a private C++17 public-contract codec for deterministic generic camera registration,
+  catalog publication JSON, strict registration-response validation, and injectable process
+  instance IDs.
+- Added a deterministic full catalog builder that contains exactly the active direct Vision
+  endpoints, uses stable sorted descriptor/capability sets, and removes only the two color
+  descriptors when color is disabled.
+- Recorded the Vision OpenAPI-to-catalog schema ID mapping. No transport, lifecycle request, Pilot
+  worker, payload relay, or Pilot source dependency was added.
+
+### Status
+
+- P4-1 is complete. P4-2 will add the bounded HTTP transport; session ownership and catalog
+  publication remain inactive until their later checkpoints.
+
+### Validation
+
+- `cmake --preset debug`, `cmake --build --preset debug`, and
+  `ctest --test-dir build/debug --output-on-failure` passed 15/15 with fake camera and local fake
+  HTTP coverage only.
+- Codec tests validate exact generic registration fields, capability ordering, invalid registration
+  responses, instance identity injection, catalog stable sorting, direct advertised URLs, and
+  color-disabled omission.
+- No Pilot process/source import, physical camera, recording, geometry extension, or payload relay
+  was used.
+
+### Next goals
+
+- Implement P4-2 bounded public HTTP transport with fake-server success, malformed, timeout, and
+  cancellation coverage.
+
 ## 2026-08-08 - Phase 4 P4-0 Pilot public contract pin
 
 ### Changes

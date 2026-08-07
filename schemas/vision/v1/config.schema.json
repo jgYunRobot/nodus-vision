@@ -10,7 +10,8 @@
     "component_id",
     "device",
     "calibration",
-    "provider"
+    "provider",
+    "pilot"
   ],
   "properties": {
     "schema_version": {"const": 1},
@@ -92,6 +93,37 @@
         "max_header_bytes": {"type": "integer", "minimum": 1, "maximum": 1048576},
         "max_body_bytes": {"type": "integer", "minimum": 1, "maximum": 10485760},
         "max_frame_age_ms": {"type": "integer", "minimum": 1, "maximum": 60000}
+      }
+    },
+    "pilot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "enabled",
+        "base_url",
+        "clock_domain",
+        "connect_timeout_ms",
+        "request_timeout_ms",
+        "max_response_bytes",
+        "retry_initial_delay_ms",
+        "retry_max_delay_ms",
+        "shutdown_timeout_ms"
+      ],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "base_url": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^http://(?!(?:0\\.0\\.0\\.0|\\*)[:/])(?!(?:[^/]*@))[^?#]+$"
+        },
+        "clock_domain": {"const": "monotonic_same_host"},
+        "connect_timeout_ms": {"type": "integer", "minimum": 1, "maximum": 60000},
+        "request_timeout_ms": {"type": "integer", "minimum": 1, "maximum": 60000},
+        "max_response_bytes": {"type": "integer", "minimum": 1, "maximum": 10485760},
+        "retry_initial_delay_ms": {"type": "integer", "minimum": 1, "maximum": 60000},
+        "retry_max_delay_ms": {"type": "integer", "minimum": 1, "maximum": 60000},
+        "shutdown_timeout_ms": {"type": "integer", "minimum": 1, "maximum": 60000}
       }
     }
   },
