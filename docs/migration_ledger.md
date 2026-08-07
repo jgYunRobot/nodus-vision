@@ -57,3 +57,12 @@ CMake configure. It is a build-tree dependency only; Nodus Vision does not impor
 Boost 1.83.0 is a host-provided pinned development dependency for the C++17 Phase 2 HTTP server and
 typed JSON parser. Its version is resolved by CMake and recorded here rather than inherited from
 PA-CONTROL.
+
+## Phase 3 native dependencies
+
+| Dependency | Source | Exact revision/version | License | Consuming target |
+|---|---|---|---|---|
+| libjpeg-turbo | `https://github.com/libjpeg-turbo/libjpeg-turbo.git` | `7fa4b5b762c9a99b46b0b7838f5fd55071b92ea5` (`3.0.3`) | BSD-3-Clause, IJG | `nodus_vision_provider_http` |
+
+The pinned source is configured through a CMake `ExternalProject` because upstream explicitly does
+not support `add_subdirectory()` integration. Vision links its generated static `libjpeg.a` directly.

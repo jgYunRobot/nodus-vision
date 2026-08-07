@@ -1,5 +1,30 @@
 # Progress
 
+## 2026-08-07 - Phase 3 JPEG and binary snapshot checkpoint
+
+### Changes
+
+- Added the exact pinned libjpeg-turbo source and an ExternalProject build integration after verifying
+  upstream rejects direct `add_subdirectory()` use.
+- Added RGB JPEG encoding, stream-kind latest-only encoded cache, and immutable frame capture-loop
+  publication. Older/duplicate identities cannot replace a newer cached preview.
+- Added direct `GET /snapshot/color` and `GET /snapshot/pointcloud.bin` routes with no-frame 503
+  error responses, no-store cache control, complete capture identity headers, and runtime metadata.
+- Added PCD1 v2 little-endian writer/reader with exact length, magic/version, and truncation checks.
+
+### Status
+
+- This is an in-progress Phase 3 checkpoint. JPEG color snapshot and binary point-cloud snapshot are
+  directly served from Vision-owned data; MJPEG, depth preview, strict ROI/pixel POST queries, and
+  slow-client backpressure acceptance remain before the Phase 3 gate.
+
+### Validation
+
+- `cmake --build --preset debug` passed with the pinned libjpeg-turbo ExternalProject.
+- `ctest --test-dir build/debug --output-on-failure` passed 11/11 hardware-independent tests.
+- No physical D435 or USB access was attempted. No Pilot, recording, Portal, Operator, MetaGate, or
+  Control integration was added.
+
 ## 2026-08-07 - Phase 2 strict provider configuration and lifecycle
 
 ### Changes

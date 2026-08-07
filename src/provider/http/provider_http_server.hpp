@@ -9,13 +9,25 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <utility>
+#include <vector>
 
 namespace nodus_vision {
 
+/** @brief provider route가 반환하는 bounded response payload다. */
+struct ProviderHttpResponse {
+    int status{200};
+    std::string content_type{"application/json"};
+    std::string body;
+    std::vector<std::pair<std::string, std::string>> headers;
+};
+
 /** @brief Phase 2 health/metadata route payload callback이다. */
 struct ProviderHttpRoutes {
-    std::function<std::string()> get_health_json;
-    std::function<std::string()> get_metadata_json;
+    std::function<ProviderHttpResponse()> get_health;
+    std::function<ProviderHttpResponse()> get_metadata;
+    std::function<ProviderHttpResponse()> get_color_snapshot;
+    std::function<ProviderHttpResponse()> get_pointcloud_snapshot;
 };
 
 /** @brief asynchronous bounded HTTP listener다. */

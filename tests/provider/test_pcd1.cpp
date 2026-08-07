@@ -1,0 +1,3 @@
+#include <gtest/gtest.h>
+#include "pcd1.hpp"
+namespace nodus_vision { TEST(Pcd1, RoundTripsAndRejectsTruncation){PointCloudSnapshot s;s.identity.frame_number=7;s.identity.capture_timestamp_ns=9;s.source_profile={4,3,30,PixelFormat::e_Z16};s.source_intrinsics.fx=2;s.source_intrinsics.fy=3;s.requested_stride_pixels=1;s.stride_pixels=2;s.points.push_back({{1.F,2.F,3.F},{4U,5U,6U}});auto b=writePcd1V2(s);EXPECT_EQ(b.size(),127U);auto r=readPcd1V2(b);EXPECT_EQ(r.identity.frame_number,7U);EXPECT_FLOAT_EQ(r.points[0].optical_point_m[2],3.F);EXPECT_EQ(r.points[0].color_rgb[1],5U);b.pop_back();EXPECT_THROW(readPcd1V2(b),std::invalid_argument);} }

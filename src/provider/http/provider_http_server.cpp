@@ -59,11 +59,29 @@ private:
             response.result(http::status::method_not_allowed);
             response.body() = "{\"schema_version\":1,\"error\":{\"code\":\"method_not_allowed\",\"message\":\"Method is not allowed.\",\"retryable\":false}}";
         } else if (request.target() == "/health") {
-            response.result(http::status::ok);
-            response.body() = m_routes.get_health_json();
+            const ProviderHttpResponse payload = m_routes.get_health();
+            response.result(static_cast<http::status>(payload.status));
+            response.set(http::field::content_type, payload.content_type);
+            response.body() = payload.body;
+            for (const auto& header : payload.headers) { response.set(header.first, header.second); }
         } else if (request.target() == "/metadata") {
-            response.result(http::status::ok);
-            response.body() = m_routes.get_metadata_json();
+            const ProviderHttpResponse payload = m_routes.get_metadata();
+            response.result(static_cast<http::status>(payload.status));
+            response.set(http::field::content_type, payload.content_type);
+            response.body() = payload.body;
+            for (const auto& header : payload.headers) { response.set(header.first, header.second); }
+        } else if (request.target() == "/snapshot/color") {
+            const ProviderHttpResponse payload = m_routes.get_color_snapshot();
+            response.result(static_cast<http::status>(payload.status));
+            response.set(http::field::content_type, payload.content_type);
+            response.body() = payload.body;
+            for (const auto& header : payload.headers) { response.set(header.first, header.second); }
+        } else if (request.target() == "/snapshot/pointcloud.bin") {
+            const ProviderHttpResponse payload = m_routes.get_pointcloud_snapshot();
+            response.result(static_cast<http::status>(payload.status));
+            response.set(http::field::content_type, payload.content_type);
+            response.body() = payload.body;
+            for (const auto& header : payload.headers) { response.set(header.first, header.second); }
         } else {
             response.body() = "{\"schema_version\":1,\"error\":{\"code\":\"route_not_found\",\"message\":\"Route is not available.\",\"retryable\":false}}";
         }
