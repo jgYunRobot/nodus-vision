@@ -5,6 +5,7 @@
 
 #include <gtest/gtest.h>
 
+#include <atomic>
 #include <boost/asio.hpp>
 #include <boost/beast.hpp>
 #include <boost/beast/http.hpp>
@@ -38,6 +39,7 @@ class FakePilotLifecycle {
     }
 
     ~FakePilotLifecycle() {
+        m_running.store(false);
         beast::error_code ignored;
         tcp::socket wake_socket(m_io_context);
         wake_socket.connect({asio::ip::address_v4::loopback(), m_port}, ignored);
@@ -58,11 +60,11 @@ class FakePilotLifecycle {
 
    private:
     void runServer() {
-        while (m_acceptor.is_open()) {
+        while (m_running.load()) {
             tcp::socket socket(m_io_context);
             beast::error_code error;
             m_acceptor.accept(socket, error);
-            if (error) {
+            if (error || !m_running.load()) {
                 return;
             }
             beast::flat_buffer buffer;
@@ -103,6 +105,7 @@ class FakePilotLifecycle {
     asio::io_context m_io_context;
     tcp::acceptor m_acceptor;
     unsigned short m_port{0};
+    std::atomic<bool> m_running{true};
     bool m_retry_catalog_once{false};
     bool m_catalog_retry_sent{false};
     mutable std::mutex m_mutex;

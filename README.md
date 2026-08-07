@@ -4,10 +4,10 @@
 physical camera adapters, frame capture, preview encoding, bounded spatial queries, point-cloud
 payloads, and eventually camera recording artifacts.
 
-Phase 0-3 are implemented. The current C++17 provider supports deterministic fake-camera operation,
+Phase 0-4 are implemented. The current C++17 provider supports deterministic fake-camera operation,
 hardware-independent Intel D435 adapter build validation, strict configuration, health/metadata,
-JPEG snapshots, latest-only MJPEG preview, depth queries, and PCD1 v2 binary point clouds. Pilot
-registration and recording are later phases.
+JPEG snapshots, latest-only MJPEG preview, depth queries, PCD1 v2 binary point clouds, and bounded
+Pilot public lifecycle/catalog recovery.
 
 ## Target boundary
 
@@ -18,6 +18,9 @@ physical camera -> nodus-vision -> direct payload consumers
 ```
 
 - Pilot discovers Vision and its endpoints but does not relay image/depth/video payloads.
+- Vision consumes only the pinned Pilot OpenAPI 1.0.2 bytes in `schemas/pilot/v1/`; its worker owns
+  registration, heartbeats/state updates, full catalog publication, and recovery independently of
+  direct provider serving.
 - Portal consumes preview, snapshot, query, and point-cloud endpoints directly after Pilot
   discovery.
 - Operator/Policy resolves compatible observation endpoints through Pilot and reads Vision
@@ -56,6 +59,11 @@ Direct provider endpoints include `/health`, `/metadata`, color/depth MJPEG stre
 JPEG snapshots, ROI/pixel depth queries, and `/snapshot/pointcloud.bin`. Their public contract is
 `schemas/vision/v1/openapi.yaml`; the binary point-cloud layout is documented in
 `schemas/vision/v1/pointcloud_pcd1_v2.md`.
+
+The fake-camera default disables Pilot. Use `assets/configs/examples/fake_camera_pilot.json` to
+enable the public HTTP lifecycle client against a local fake or deployed Pilot endpoint. The
+integration has no TLS/authentication or physical-camera acceptance claim, and Phase 5 recording,
+Phase 6 geometry, and product integrations remain separate work.
 
 No physical D435 acceptance has been performed. Starting an Intel D435 config requires an explicit
 hardware validation task and device-access approval.

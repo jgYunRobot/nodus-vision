@@ -1,5 +1,38 @@
 # Progress
 
+## 2026-08-08 - Phase 4 P4-6 acceptance and handoff
+
+### Changes
+
+- Completed the Phase 4-only handoff documentation: README now identifies the immutable Pilot
+  OpenAPI 1.0.2 input, direct-payload boundary, enabled fake configuration, and excluded Phase 5+
+  scopes.
+- Fixed the fake-Pilot test server teardown exposed by repeated acceptance. It now has an explicit
+  stop flag so an accept wakeup cannot race into another blocking accept.
+
+### Status
+
+- Phase 4 Pilot public integration is complete: Vision registers, publishes only direct endpoint
+  metadata, maintains lifecycle, and recovers Pilot sessions without owning/relaying camera data.
+- Physical D435, TLS/authentication, recording, geometry, and Portal/Operator/MetaGate/Gym product
+  integration remain unvalidated and out of scope.
+
+### Validation
+
+- `clang-format-18` completed on every Phase 4 C++ header/source/test touched by this task.
+- `cmake --preset debug`, `cmake --build --preset debug`, and
+  `ctest --test-dir build/debug --output-on-failure` passed with fake camera/local fake Pilot only.
+- `pilot_test_integration_client` and `integration_test_application_lifecycle` each passed 25
+  consecutive executions (50 repeated runs total), covering lifecycle retry/shutdown and Pilot
+  restart/provider-continuity teardown.
+- Contract pin, public-path, session redaction, staged diff, and working-tree checks are recorded
+  at the final checkpoint. No physical camera or Pilot process/source was accessed.
+
+### Next goals
+
+- Stop after Phase 4. Design Phase 5 recording separately before adding any recording lifecycle or
+  artifact behavior.
+
 ## 2026-08-08 - Phase 4 P4-5 application composition and recovery
 
 ### Changes
