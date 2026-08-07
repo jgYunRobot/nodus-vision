@@ -1,0 +1,119 @@
+# Progress
+
+## 2026-08-07 - Phase 0 foundation and provenance verification
+
+### Changes
+
+- Verified the repository foundation, pinned `docs/agent_docs` gitlink, CMake 3.28/C++17 presets,
+  migration manifest, ledger, and PA-CONTROL camera migration ownership before adding runtime code.
+- Confirmed PA-CONTROL revision `1c44efbe0b03fa77187305d0f50948f731e972f0` matches the recorded
+  read-only migration baseline and that the selected camera paths are clean at that revision.
+- Kept the manifest's dependency provenance structure as the required record for every Phase 1-3
+  dependency: source repository, exact revision or version, license, and consuming target.
+
+### Status
+
+- Phase 0 is complete. The repository remains independent of PA-CONTROL at build and runtime, and
+  no source or dependency implementation has been copied from that checkout.
+- The foundation is ready for Phase 1 camera-neutral contracts, latest-frame storage, fake adapter,
+  and hardware-independent Intel D435 target work.
+
+### Validation
+
+- `git submodule status --recursive` reported the expected `cfba3fbe...` `docs/agent_docs` pin.
+- `git -C /home/jgy/workspace/ai_work/pa_control rev-parse HEAD` returned the manifest revision
+  `1c44efbe0b03fa77187305d0f50948f731e972f0`.
+- Static search found no PA-CONTROL checkout include or import path outside the recorded migration
+  documentation.
+- `cmake --preset debug`, `cmake --build --preset debug`, and
+  `ctest --test-dir build/debug --output-on-failure` passed; the empty foundation defines zero tests.
+- No camera device or `/dev/bus/usb` access was attempted.
+
+### Next goals
+
+- Implement and test the Phase 1 camera-neutral core and adapters, then repeat the phase gate before
+  beginning strict provider configuration.
+
+## 2026-08-07 - Phase 0-3 detailed implementation design
+
+### Changes
+
+- Added a detailed implementation design that maps the migration design V0-V3 to executable
+  Phase 0-3 checkpoints.
+- Defined the camera-neutral contracts, latest-only frame lifetime, fake and Intel D435 adapter
+  boundaries, strict configuration, bounded Boost.Asio/Beast provider lifecycle, health/metadata
+  contracts, and direct preview/query/point-cloud data plane.
+- Added per-phase file allowlists, dependency provenance rules, test matrices, commit checkpoints,
+  stop gates, and explicit exclusions for Pilot, recording, product integration, and hardware
+  acceptance.
+
+### Status
+
+- Phase 0-3 are specified in sufficient detail for implementation without inventing Pilot,
+  recording, Portal, Operator, MetaGate, or Control behavior.
+- The repository remains at design/foundation state; no runtime source, dependency, schema, build
+  target, or hardware behavior was implemented by this documentation task.
+- No commit or push was performed.
+
+### Validation
+
+- The new design filename follows the flat `docs/designs` snake-case convention.
+- Design headings, referenced repository paths, and the Phase 0-3/V0-V3 mapping were reviewed.
+- `git diff --check` passed after the documentation update.
+- Build, tests, dependency installation, Pilot startup, camera access, and hardware validation were
+  not run because this task changed documentation only.
+
+### Next goals
+
+- Execute Phase 0 verification and implement Phase 1 camera-neutral contracts, latest frame store,
+  deterministic fake adapter, and hardware-independent Intel D435 adapter.
+- Continue to Phase 2 and Phase 3 only after each preceding validation and commit gate passes.
+- Stop after Phase 3 and request separate authorization for Phase 4 Pilot integration.
+
+## 2026-08-07 - Repository foundation and camera-provider migration design
+
+### Changes
+
+- Added the root `AGENTS.md`, project documentation rules, README, C++17/CMake 3.28 foundation,
+  Debug/Release presets, clang-format policy, ignore rules, and executable development setup script.
+- Added `docs/agent_docs` as a pinned submodule at
+  `cfba3fbe8a5fb4b20e6d97a1e5596f1718889612` using its official GitHub URL.
+- Recorded PA-CONTROL revision `1c44efbe0b03fa77187305d0f50948f731e972f0`, selected clean
+  source paths, librealsense/nodus_rm observations, and the Pilot OpenAPI 1.0.2 contract baseline in
+  the migration manifest and ledger.
+- Analyzed the native Intel D435 module, camera runtime, Pilot camera manager/config, PA-CPU camera
+  routing/MetaGate reference path, Portal predecessor UI, point-cloud rendering, FFmpeg recording,
+  and Gym artifact validation.
+- Added the detailed target design for a one-camera-per-process native ServiceProvider, direct
+  provider payload plane, Pilot lifecycle/catalog client, camera-neutral adapter boundary, bounded
+  capture/streaming, timestamp/calibration semantics, recording handoff, and V0-V8 migration plan.
+
+### Status
+
+- V0 repository foundation and migration design are complete in the working tree.
+- No PA-CONTROL source, camera driver, FFmpeg writer, Pilot contract artifact, or runtime dependency
+  has been copied yet. The root CMake project intentionally defines no build target.
+- `nodus-vision` is defined as the native Camera ServiceProvider; Portal owns UI, Operator owns
+  Policy observations, MetaGate/Gym own recording coordination and durable dataset commit, and
+  Pilot owns generic discovery without payload relay.
+- No commit or push was performed.
+
+### Validation
+
+- `git submodule status --recursive` reports the intended `cfba3fbe...` agent-docs pin.
+- `git diff --check` passed.
+- `bash -n setup_dev.sh` passed.
+- `CMakePresets.json` and `migration/source_manifest.json` parsed as JSON.
+- `cmake --list-presets` reported the `debug` and `release` presets.
+- The design directory is flat and contains the expected snake-case design filename.
+- Build, tests, dependency installation, Pilot startup, camera access, and hardware validation were
+  not run because they were not requested and the foundation contains no implementation target.
+
+### Next goals
+
+- Implement V1 camera-neutral contracts and the Intel D435 adapter from the recorded PA-CONTROL
+  baseline without importing the source checkout at runtime.
+- Implement V2 strict config, ordered application lifecycle, and bounded provider health/metadata
+  server before exposing preview or hardware behavior.
+- Add the pinned Pilot artifact and component/catalog integration only at V4 after the provider data
+  plane has a stable public contract.

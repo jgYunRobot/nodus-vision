@@ -1,0 +1,38 @@
+# Migration Ledger
+
+## PA-CONTROL baseline
+
+Vision migration is based on PA-CONTROL revision
+`1c44efbe0b03fa77187305d0f50948f731e972f0`. The selected camera/vision paths were clean at capture
+time. The source worktree had unrelated progress and dependency-directory changes, so the revision
+plus the path inventory in `migration/source_manifest.json` defines the baseline.
+
+PA-CONTROL remains a read-only design and behavior reference. Nodus Vision must not include, import,
+or execute files from the PA-CONTROL checkout.
+
+## Pilot public contract baseline
+
+The implementation phase should pin Pilot OpenAPI version `1.0.2` from revision
+`46d35dea702e71ae78aa2bb932a11e1bf5e79a73`. The observed SHA-256 for
+`schemas/pilot/v1/openapi.yaml` is
+`4c536a3b099a478f6af5420af63b5a32965913f8fc5943c655a55e8d2a3ed5a8`.
+
+That contract already supplies generic component lifecycle and endpoint catalog publication.
+Vision must use those public HTTP routes rather than importing or linking Pilot implementation
+code. The contract artifact and provenance are added together at the Pilot-integration checkpoint,
+not during this design-only foundation.
+
+## Native dependency observations
+
+- PA-CONTROL currently uses `librealsense` revision
+  `05e3d1e57f3c87e6c9768eaca9e89639966beee2` (`v2.58.1-3-g05e3d1e57`) under Apache-2.0.
+- Existing camera reference-frame math uses `nodus_rm` revision
+  `ea12ce3070157835518c9436ae0517690fb51224`.
+- RGB recording uses the host FFmpeg libraries and the `libx264` encoder. Distribution licensing
+  and codec availability depend on the final FFmpeg build and must be recorded before a packaged
+  release.
+- JPEG preview encoding currently obtains `stb_image_write.h` indirectly from the librealsense
+  checkout. Nodus Vision must pin and document that dependency directly rather than depending on an
+  incidental third-party include path.
+
+No native dependency source was copied or added by the foundation task.

@@ -1,0 +1,10 @@
+/build/
+/install/
+/libs/librealsense/
+/libs/nlohmann_json/
+/libs/cpp_httplib/
+compile_commands.json
+*.log
+*.mp4
+*.jsonl
+recordings/

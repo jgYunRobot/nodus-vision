@@ -1,0 +1,100 @@
+{
+  "schema_version": 1,
+  "source_repository": "https://github.com/jgYunRobot/pa_control",
+  "source_revision": "1c44efbe0b03fa77187305d0f50948f731e972f0",
+  "relevant_paths_clean_at_capture": true,
+  "preserve_original_sources": true,
+  "external_dependencies": [
+    {
+      "name": "librealsense",
+      "source_repository": "https://github.com/realsenseai/librealsense.git",
+      "revision": "05e3d1e57f3c87e6c9768eaca9e89639966beee2",
+      "observed_tag": "v2.58.1-3-g05e3d1e57",
+      "license": "Apache-2.0",
+      "purpose": "Intel RealSense camera adapter and native frame processing"
+    },
+    {
+      "name": "nodus_rm",
+      "source_repository": "https://github.com/jgYunRobot/nodus_rm.git",
+      "revision": "ea12ce3070157835518c9436ae0517690fb51224",
+      "purpose": "existing camera reference-frame rotation behavior"
+    }
+  ],
+  "source_paths": [
+    {
+      "path": "modules/vision",
+      "disposition": "migrate",
+      "target_responsibility": "camera-neutral native contracts and vendor adapters"
+    },
+    {
+      "path": "modules/vision/intel_d435",
+      "disposition": "migrate",
+      "target_responsibility": "Intel D435 adapter, frame ownership, depth queries, and point cloud"
+    },
+    {
+      "path": "apps/pacf/camera_runtime",
+      "disposition": "migrate_and_redesign",
+      "target_responsibility": "Vision process composition, provider HTTP data plane, encoding, and recording writer"
+    },
+    {
+      "path": "apps/pacf/pilot/src/pilot/camera_manager",
+      "disposition": "reference_only",
+      "target_responsibility": "config, health, endpoint, and recovery behavior; Pilot subprocess ownership is removed"
+    },
+    {
+      "path": "apps/pacf/pilot/config/cameras",
+      "disposition": "migrate_and_split",
+      "target_responsibility": "Vision device/capture/calibration config; UI and process-supervisor fields move to their owners"
+    },
+    {
+      "path": "apps/pacf/pa_cpu/src/pa_cpu/pilot_gateway.py",
+      "disposition": "reference_only",
+      "target_responsibility": "camera snapshot, recording reference, and readiness behavior"
+    },
+    {
+      "path": "apps/pacf/pa_cpu/src/pa_cpu/http_server.py",
+      "disposition": "do_not_migrate",
+      "target_responsibility": "replaced by Pilot generic endpoint discovery and direct Vision services"
+    },
+    {
+      "path": "apps/pacf/pa_cpu/src/pa_cpu/pilot_meta_gate.py",
+      "disposition": "external_owner",
+      "target_responsibility": "future MetaGate sample alignment and recording orchestration"
+    },
+    {
+      "path": "apps/web_ui/src/components/camera_control_panel.tsx",
+      "disposition": "external_owner",
+      "target_responsibility": "nodus-portal camera workspace"
+    },
+    {
+      "path": "apps/web_ui/src/components/camera_point_cloud.tsx",
+      "disposition": "external_owner",
+      "target_responsibility": "nodus-portal point-cloud parsing, optical-frame conversion, and rendering"
+    },
+    {
+      "path": "apps/gym/cli/record",
+      "disposition": "reference_only",
+      "target_responsibility": "recording manifest consumer and durable dataset commit"
+    },
+    {
+      "path": "docs/modules/vision",
+      "disposition": "design_reference",
+      "target_responsibility": "native camera and Intel D435 behavior inventory"
+    },
+    {
+      "path": "docs/apps/pacf/camera_runtime",
+      "disposition": "design_reference",
+      "target_responsibility": "provider process and direct data-plane behavior inventory"
+    },
+    {
+      "path": "docs/apps/camera_recording_design.md",
+      "disposition": "design_reference",
+      "target_responsibility": "recording artifact and owner-boundary inventory"
+    },
+    {
+      "path": "docs/apps/web_ui/camera_control_panel.md",
+      "disposition": "design_reference",
+      "target_responsibility": "Portal-facing camera discovery and presentation requirements"
+    }
+  ]
+}
