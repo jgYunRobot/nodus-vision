@@ -1,5 +1,34 @@
 # Progress
 
+## 2026-08-08 - Phase 4 P4-5 application composition and recovery
+
+### Changes
+
+- Composed `PilotIntegrationClient` into `VisionApplication` only after the local provider is
+  bound and camera start/degraded state is known; worker startup does not wait for Pilot.
+- Ordered shutdown to stop the Pilot worker before accepting/stream shutdown and camera teardown.
+  `/health` now projects only redacted Pilot integration state.
+- Added application-level fake-camera/fake-Pilot coverage for disabled and absent Pilot, direct
+  provider continuity, Pilot restart recovery, new server identity, stable provider port, and
+  unchanged camera capture generation.
+
+### Status
+
+- P4-5 is complete. The application does not spawn or import Pilot; the test server implements
+  only the pinned public HTTP lifecycle/catalog shape.
+
+### Validation
+
+- `clang-format-18` formatted changed C++ files.
+- The fake-Pilot restart integration test passed: absent/restarted Pilot changed only the Pilot
+  snapshot and did not restart direct provider serving or capture generation.
+- No physical camera, Pilot process/source, payload relay, recording, or geometry work was used.
+
+### Next goals
+
+- Run P4-6 acceptance: repeated recovery/shutdown, full format/build/CTest/static checks, staged
+  review, README/progress handoff, and final checkpoint commit.
+
 ## 2026-08-08 - Phase 4 P4-4 endpoint catalog publication
 
 ### Changes

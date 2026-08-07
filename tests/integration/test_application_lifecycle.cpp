@@ -5,10 +5,12 @@
 
 #include <gtest/gtest.h>
 
+#include <atomic>
 #include <boost/asio.hpp>
 #include <boost/beast.hpp>
 #include <boost/beast/http.hpp>
 #include <chrono>
+#include <memory>
 #include <string>
 #include <thread>
 
@@ -69,6 +71,102 @@ http::response<http::string_body> waitForColorSnapshot(int port) {
     return response;
 }
 
+class RestartableFakePilot {
+   public:
+    ~RestartableFakePilot() { stopServer(); }
+
+    int startServer(int requested_port = 0) {
+        m_io_context.restart();
+        m_p_acceptor = std::make_unique<tcp::acceptor>(m_io_context);
+        m_p_acceptor->open(tcp::v4());
+        m_p_acceptor->set_option(asio::socket_base::reuse_address(true));
+        m_p_acceptor->bind(
+            {asio::ip::address_v4::loopback(), static_cast<unsigned short>(requested_port)});
+        m_p_acceptor->listen();
+        m_port = m_p_acceptor->local_endpoint().port();
+        ++m_instance_index;
+        m_running.store(true);
+        m_worker = std::thread([this]() { runServer(); });
+        return m_port;
+    }
+
+    void stopServer() {
+        if (!m_running.exchange(false)) {
+            return;
+        }
+        beast::error_code ignored;
+        asio::io_context wake_context;
+        tcp::socket wake_socket(wake_context);
+        wake_socket.connect({asio::ip::address_v4::loopback(), static_cast<unsigned short>(m_port)},
+                            ignored);
+        wake_socket.close(ignored);
+        m_p_acceptor->cancel(ignored);
+        m_p_acceptor->close(ignored);
+        if (m_worker.joinable()) {
+            m_worker.join();
+        }
+        m_p_acceptor.reset();
+    }
+
+   private:
+    void runServer() {
+        while (m_running.load()) {
+            tcp::socket socket(m_io_context);
+            beast::error_code error;
+            m_p_acceptor->accept(socket, error);
+            if (error || !m_running.load()) {
+                return;
+            }
+            beast::flat_buffer buffer;
+            http::request<http::string_body> request;
+            http::read(socket, buffer, request, error);
+            if (error) {
+                continue;
+            }
+            const std::string target(request.target());
+            http::status status = http::status::ok;
+            std::string body = "{}";
+            if (target == "/api/v1/components/register") {
+                status = http::status::created;
+                body = "{\"session_id\":\"session-" + std::to_string(m_instance_index) +
+                       "\",\"server_instance_id\":\"pilot-" + std::to_string(m_instance_index) +
+                       "\",\"accepted_protocol_version\":1,\"accepted_schema_versions\":[1],"
+                       "\"heartbeat_interval_ms\":20,\"lease_timeout_ms\":100,\"server_time\":0}";
+            } else if (target.find("/endpoint-catalog") != std::string::npos) {
+                body = "{\"status\":\"accepted\",\"server_instance_id\":\"pilot-" +
+                       std::to_string(m_instance_index) +
+                       "\",\"component_id\":\"camera.fake\",\"session_generation\":1,\"catalog_"
+                       "generation\":1,\"catalog_revision\":1,\"descriptor_count\":9}";
+            }
+            http::response<http::string_body> response(status, request.version());
+            response.set(http::field::content_type, "application/json");
+            response.keep_alive(false);
+            response.body() = body;
+            response.prepare_payload();
+            http::write(socket, response, error);
+        }
+    }
+
+    asio::io_context m_io_context;
+    std::unique_ptr<tcp::acceptor> m_p_acceptor;
+    std::atomic<bool> m_running{false};
+    std::thread m_worker;
+    int m_port{0};
+    int m_instance_index{0};
+};
+
+template <typename Predicate>
+bool waitFor(Predicate predicate) {
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(500);
+    while (std::chrono::steady_clock::now() < deadline) {
+        if (predicate()) {
+            return true;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    return predicate();
+}
+
 }  // namespace
 
 TEST(VisionApplication, ServesFakeDataPlaneAndRestartsCleanly) {
@@ -89,6 +187,10 @@ TEST(VisionApplication, ServesFakeDataPlaneAndRestartsCleanly) {
         requestResponse(first_port, http::verb::get, "/metadata");
     EXPECT_NE(metadata.body().find("/stream/color.mjpg"), std::string::npos);
     EXPECT_NE(metadata.body().find("/query/roi_depth"), std::string::npos);
+    const http::response<http::string_body> health =
+        requestResponse(first_port, http::verb::get, "/health");
+    EXPECT_NE(health.body().find("\"pilot\""), std::string::npos);
+    EXPECT_NE(health.body().find("\"disabled\""), std::string::npos);
 
     const http::response<http::string_body> query =
         requestResponse(first_port, http::verb::post, "/query/pixel_to_point", "{\"x\":1,\"y\":1}");
@@ -104,6 +206,65 @@ TEST(VisionApplication, ServesFakeDataPlaneAndRestartsCleanly) {
     application.startApplication();
     EXPECT_GT(application.getBoundPort(), 0);
     EXPECT_EQ(application.getHealthSnapshot().state, ProviderState::e_READY);
+    application.stopApplication();
+}
+
+TEST(VisionApplication, KeepsDirectProviderAvailableWhenPilotIsAbsent) {
+    VisionConfig config = makeFakeConfig();
+    config.pilot = {true, "http://127.0.0.1:1", "monotonic_same_host", 20, 20, 4096, 5, 20, 20};
+    VisionApplication application(config);
+    application.startApplication();
+    const int port = application.getBoundPort();
+    ASSERT_GT(port, 0);
+    EXPECT_EQ(requestResponse(port, http::verb::get, "/health").result(), http::status::ok);
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(200);
+    while (std::chrono::steady_clock::now() < deadline &&
+           application.getHealthSnapshot().pilot.state != PilotIntegrationState::e_RECOVERING) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    EXPECT_EQ(application.getHealthSnapshot().state, ProviderState::e_READY);
+    EXPECT_EQ(application.getHealthSnapshot().pilot.state, PilotIntegrationState::e_RECOVERING);
+    application.stopApplication();
+}
+
+TEST(VisionApplication, RecoversPilotRestartWithoutRestartingProviderOrCapture) {
+    RestartableFakePilot pilot;
+    const int pilot_port = pilot.startServer();
+    VisionConfig config = makeFakeConfig();
+    config.pilot = {true,
+                    "http://127.0.0.1:" + std::to_string(pilot_port),
+                    "monotonic_same_host",
+                    20,
+                    20,
+                    4096,
+                    5,
+                    20,
+                    20};
+    VisionApplication application(config);
+    application.startApplication();
+    const int provider_port = application.getBoundPort();
+    ASSERT_TRUE(waitFor([&application]() {
+        return application.getHealthSnapshot().pilot.state == PilotIntegrationState::e_ONLINE;
+    }));
+    const std::uint64_t capture_generation =
+        application.getHealthSnapshot().camera.latest_identity.capture_generation;
+    pilot.stopServer();
+    ASSERT_TRUE(waitFor([&application]() {
+        return application.getHealthSnapshot().pilot.state == PilotIntegrationState::e_RECOVERING;
+    }));
+    EXPECT_EQ(requestResponse(provider_port, http::verb::get, "/health").result(),
+              http::status::ok);
+    EXPECT_EQ(application.getBoundPort(), provider_port);
+    EXPECT_EQ(application.getHealthSnapshot().camera.latest_identity.capture_generation,
+              capture_generation);
+    pilot.startServer(pilot_port);
+    ASSERT_TRUE(waitFor([&application]() {
+        return application.getHealthSnapshot().pilot.state == PilotIntegrationState::e_ONLINE &&
+               application.getHealthSnapshot().pilot.server_instance_id == "pilot-2";
+    }));
+    EXPECT_EQ(application.getBoundPort(), provider_port);
+    EXPECT_EQ(application.getHealthSnapshot().camera.latest_identity.capture_generation,
+              capture_generation);
     application.stopApplication();
 }
 

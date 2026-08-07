@@ -25,6 +25,7 @@
 #include "intel_d435_adapter.hpp"
 #include "jpeg_encoder.hpp"
 #include "pcd1.hpp"
+#include "pilot_integration_client.hpp"
 #include "provider_http_server.hpp"
 #include "query_serializer.hpp"
 
@@ -143,6 +144,22 @@ std::string makeHealthJson(const ProviderHealthSnapshot& health) {
     root["state"] = toString(health.state);
     root["server"] = std::move(server);
     root["camera"] = std::move(camera);
+    boost::json::object pilot;
+    pilot["enabled"] = health.pilot.enabled;
+    pilot["state"] = toString(health.pilot.state);
+    pilot["server_instance_id"] = health.pilot.server_instance_id.empty()
+                                      ? boost::json::value(nullptr)
+                                      : boost::json::value(health.pilot.server_instance_id);
+    pilot["catalog_generation"] = health.pilot.catalog_generation;
+    pilot["descriptor_count"] = health.pilot.descriptor_count;
+    pilot["retry_count"] = health.pilot.retry_count;
+    pilot["last_success_age_ms"] = health.pilot.last_success_age_ms < 0
+                                       ? boost::json::value(nullptr)
+                                       : boost::json::value(health.pilot.last_success_age_ms);
+    pilot["last_error"] = health.pilot.last_error.empty()
+                              ? boost::json::value(nullptr)
+                              : boost::json::value(health.pilot.last_error);
+    root["pilot"] = std::move(pilot);
     root["last_error"] = health.last_error.empty() ? boost::json::value(nullptr)
                                                    : boost::json::value(health.last_error);
     return boost::json::serialize(root);
@@ -199,6 +216,7 @@ class VisionApplication::Impl {
     VisionConfig m_config;
     std::unique_ptr<CameraAdapter> m_p_adapter;
     std::unique_ptr<ProviderHttpServer> m_p_server;
+    std::unique_ptr<PilotIntegrationClient> m_p_pilot_client;
     FrameStore m_frame_store;
     EncodedPreviewCache m_preview_cache;
     std::thread m_capture_thread;
@@ -446,11 +464,14 @@ void VisionApplication::startApplication() {
         m_p_impl->m_health.state = ProviderState::e_DEGRADED;
         m_p_impl->m_health.last_error = "Camera adapter connection or stream start failed.";
     }
+    m_p_impl->m_p_pilot_client = std::make_unique<PilotIntegrationClient>(m_p_impl->m_config);
+    m_p_impl->m_p_pilot_client->startClient(m_p_impl->m_health.state);
 }
 
 void VisionApplication::stopApplication() noexcept {
     ProviderHttpServer* p_server = nullptr;
     CameraAdapter* p_adapter = nullptr;
+    PilotIntegrationClient* p_pilot_client = nullptr;
     {
         std::lock_guard<std::mutex> lock(m_p_impl->m_mutex);
         if (!m_p_impl->m_started) {
@@ -461,6 +482,11 @@ void VisionApplication::stopApplication() noexcept {
         m_p_impl->m_stop_requested.store(true);
         p_server = m_p_impl->m_p_server.get();
         p_adapter = m_p_impl->m_p_adapter.get();
+        p_pilot_client = m_p_impl->m_p_pilot_client.get();
+    }
+
+    if (p_pilot_client != nullptr) {
+        p_pilot_client->stopClient();
     }
 
     if (p_server != nullptr) {
@@ -492,6 +518,9 @@ ProviderHealthSnapshot VisionApplication::getHealthSnapshot() const {
     if (m_p_impl->m_p_server != nullptr) {
         health.active_connections = m_p_impl->m_p_server->getActiveConnectionCount();
         health.active_stream_clients = m_p_impl->m_p_server->getActiveStreamClientCount();
+    }
+    if (m_p_impl->m_p_pilot_client != nullptr) {
+        health.pilot = m_p_impl->m_p_pilot_client->getSnapshot();
     }
     return health;
 }
