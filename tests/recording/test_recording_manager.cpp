@@ -79,9 +79,10 @@ TEST(RecordingManager, DrainsImmutableRgbFramesIntoStagingArtifact) {
     EXPECT_EQ(status.state, RecordingState::e_FINALIZED);
     EXPECT_EQ(status.admitted_frame_count, 2U);
     EXPECT_EQ(status.submitted_frame_count, 2U);
-    const std::filesystem::path artifact = directory.getPath() / ".staging" / "episode-0001-front";
+    const std::filesystem::path artifact = directory.getPath() / "finalized" / "episode-0001-front";
     EXPECT_TRUE(std::filesystem::is_regular_file(artifact / "color.mp4"));
     EXPECT_TRUE(std::filesystem::is_regular_file(artifact / "frames.jsonl"));
+    EXPECT_TRUE(std::filesystem::is_regular_file(artifact / "recording_manifest.json"));
 }
 
 TEST(RecordingManager, RejectsFrameWhenNotRecording) {

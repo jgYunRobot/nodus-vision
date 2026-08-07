@@ -21,6 +21,22 @@ struct RecordingFrameEntry {
     FrameIdentity identity;
 };
 
+/** @brief immutable artifact file의 verified metadata다. */
+struct RecordingArtifactDigest {
+    std::string relative_path;
+    std::uint64_t size_bytes{0U};
+    std::string sha256_hex;
+};
+
+/** @brief regular non-symlink file의 bounded SHA-256 metadata를 계산한다. */
+RecordingArtifactDigest calculateRecordingArtifactDigest(const std::filesystem::path& root,
+                                                         const std::string& relative_path);
+/** @brief immutable finalized manifest를 compact JSON으로 serialize한다. */
+std::string serializeFinalizedRecordingManifest(const std::string& recording_id,
+                                                std::uint64_t submitted_frame_count,
+                                                const RecordingArtifactDigest& video,
+                                                const RecordingArtifactDigest& sidecar);
+
 /** @brief one recording의 compact versioned frames.jsonl writer다. */
 class RecordingSidecarWriter {
    public:

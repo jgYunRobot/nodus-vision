@@ -2,9 +2,18 @@
 
 #include "recording_manifest.hpp"
 
+#include <array>
 #include <boost/json.hpp>
+#include <fstream>
+#include <iomanip>
+#include <sstream>
 #include <stdexcept>
 #include <utility>
+
+extern "C" {
+#include <libavutil/mem.h>
+#include <libavutil/sha.h>
+}
 
 #include "recording_contracts.hpp"
 
@@ -18,6 +27,70 @@ bool isStrictlyAfter(const FrameIdentity& candidate, const FrameIdentity& previo
 }
 
 }  // namespace
+
+RecordingArtifactDigest calculateRecordingArtifactDigest(const std::filesystem::path& root,
+                                                         const std::string& relative_path) {
+    const std::filesystem::path relative(relative_path);
+    const std::filesystem::path path = root / relative;
+    if (relative.empty() || relative.is_absolute() || relative.has_parent_path() ||
+        std::filesystem::is_symlink(std::filesystem::symlink_status(path)) ||
+        !std::filesystem::is_regular_file(path)) {
+        throw std::invalid_argument("Recording artifact path is unsafe.");
+    }
+    std::ifstream input(path, std::ios::binary);
+    AVSHA* p_sha = av_sha_alloc();
+    if (!input || p_sha == nullptr || av_sha_init(p_sha, 256) != 0) {
+        av_freep(&p_sha);
+        throw std::runtime_error("Recording artifact digest cannot initialize.");
+    }
+    std::array<std::uint8_t, 65536U> buffer{};
+    while (input.good()) {
+        input.read(reinterpret_cast<char*>(buffer.data()), buffer.size());
+        const std::streamsize size = input.gcount();
+        if (size > 0) {
+            av_sha_update(p_sha, buffer.data(), static_cast<std::size_t>(size));
+        }
+    }
+    if (!input.eof()) {
+        av_freep(&p_sha);
+        throw std::runtime_error("Recording artifact digest read failed.");
+    }
+    std::array<std::uint8_t, 32U> digest{};
+    av_sha_final(p_sha, digest.data());
+    av_freep(&p_sha);
+    std::ostringstream hex;
+    for (const std::uint8_t byte : digest) {
+        hex << std::hex << std::setw(2) << std::setfill('0') << static_cast<unsigned int>(byte);
+    }
+    return {relative_path, std::filesystem::file_size(path), hex.str()};
+}
+
+std::string serializeFinalizedRecordingManifest(const std::string& recording_id,
+                                                std::uint64_t submitted_frame_count,
+                                                const RecordingArtifactDigest& video,
+                                                const RecordingArtifactDigest& sidecar) {
+    if (!isRecordingIdValid(recording_id) || video.relative_path != "color.mp4" ||
+        sidecar.relative_path != "frames.jsonl") {
+        throw std::invalid_argument("Recording manifest values are invalid.");
+    }
+    auto make_artifact = [](const RecordingArtifactDigest& digest) {
+        boost::json::object artifact;
+        artifact["path"] = digest.relative_path;
+        artifact["size_bytes"] = digest.size_bytes;
+        artifact["sha256"] = digest.sha256_hex;
+        return artifact;
+    };
+    boost::json::object root;
+    root["schema_version"] = 1;
+    root["state"] = "finalized";
+    root["recording_id"] = recording_id;
+    root["submitted_frame_count"] = submitted_frame_count;
+    boost::json::array artifacts;
+    artifacts.emplace_back(make_artifact(video));
+    artifacts.emplace_back(make_artifact(sidecar));
+    root["artifacts"] = std::move(artifacts);
+    return boost::json::serialize(root);
+}
 
 RecordingSidecarWriter::RecordingSidecarWriter(std::filesystem::path output_path,
                                                std::string recording_id, std::string sensor_frame,

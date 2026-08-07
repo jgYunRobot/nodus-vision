@@ -25,6 +25,11 @@ class RecordingStore {
     void initialize();
     /** @brief new staging directory와 atomic start request evidence를 만든다. */
     RecordingArtifactPaths createStaging(const RecordingStartRequest& request);
+    /** @brief complete staging identity를 immutable finalized location으로 atomic activation한다.
+     */
+    void activateFinalized(const RecordingArtifactPaths& paths);
+    /** @brief staging directory에 finalized manifest를 atomic persistence로 기록한다. */
+    void writeFinalizedManifest(const RecordingArtifactPaths& paths, const std::string& contents);
     /** @brief crash recovery를 위해 finalized로 노출하지 않은 staging count를 반환한다. */
     std::size_t getStagingCount() const;
 

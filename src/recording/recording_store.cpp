@@ -100,6 +100,34 @@ RecordingArtifactPaths RecordingStore::createStaging(const RecordingStartRequest
     return paths;
 }
 
+void RecordingStore::activateFinalized(const RecordingArtifactPaths& paths) {
+    const std::filesystem::path staging_parent = m_root / ".staging";
+    const std::filesystem::path finalized_parent = m_root / "finalized";
+    if (paths.staging_directory.parent_path() != staging_parent ||
+        paths.finalized_directory.parent_path() != finalized_parent ||
+        !std::filesystem::is_directory(paths.staging_directory) ||
+        std::filesystem::exists(paths.finalized_directory)) {
+        throw std::runtime_error("Recording artifact activation paths are invalid.");
+    }
+    rejectSymlink(paths.staging_directory);
+    std::error_code error;
+    std::filesystem::rename(paths.staging_directory, paths.finalized_directory, error);
+    if (error) {
+        throw std::runtime_error("Recording artifact activation failed.");
+    }
+    syncDirectory(staging_parent);
+    syncDirectory(finalized_parent);
+}
+
+void RecordingStore::writeFinalizedManifest(const RecordingArtifactPaths& paths,
+                                            const std::string& contents) {
+    if (paths.staging_directory.parent_path() != m_root / ".staging" ||
+        std::filesystem::is_symlink(std::filesystem::symlink_status(paths.staging_directory))) {
+        throw std::invalid_argument("Recording manifest staging path is unsafe.");
+    }
+    writeAtomically(paths.staging_directory, "recording_manifest.json", contents);
+}
+
 std::size_t RecordingStore::getStagingCount() const {
     const std::filesystem::path staging = m_root / ".staging";
     if (!std::filesystem::exists(staging)) {

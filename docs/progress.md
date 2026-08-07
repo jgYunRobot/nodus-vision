@@ -1,5 +1,22 @@
 # Progress
 
+## 2026-08-08 - Phase 5 P5-5 immutable artifact finalize gate
+
+### Changes
+
+- Added bounded linked-libavutil SHA-256 digesting for regular, non-symlink artifact files.
+- Finalization now closes video and sidecar, records their size/checksum in an atomically persisted
+  manifest, then atomically renames the complete staging identity into `finalized/` and fsyncs both parents.
+
+### Status
+
+- P5-5 is complete. P5-6 remains: Pilot catalog descriptor publication and the HTTP-only MetaGate fixture.
+
+### Validation
+
+- Recording manifest/store/manager CTest selection passed (3/3), including the known `abc` SHA-256 fixture
+  and finalized artifact layout.
+
 ## 2026-08-08 - Phase 5 P5-4 recording HTTP lifecycle gate
 
 ### Changes

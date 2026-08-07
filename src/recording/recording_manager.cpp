@@ -63,6 +63,7 @@ class RecordingManager::Impl {
         m_state = RecordingState::e_PREPARING;
         try {
             const RecordingArtifactPaths paths = m_store.createStaging(request);
+            m_artifact_paths = paths;
             m_writer = std::make_unique<ColorVideoWriter>(
                 ColorVideoWriterConfig{paths.staging_directory / "color.mp4", m_config.width,
                                        m_config.height, m_config.fps, m_config.bit_rate_bps});
@@ -145,6 +146,14 @@ class RecordingManager::Impl {
         try {
             m_writer->finalize();
             m_sidecar->finalize();
+            const RecordingArtifactDigest video =
+                calculateRecordingArtifactDigest(m_artifact_paths.staging_directory, "color.mp4");
+            const RecordingArtifactDigest sidecar = calculateRecordingArtifactDigest(
+                m_artifact_paths.staging_directory, "frames.jsonl");
+            m_store.writeFinalizedManifest(
+                m_artifact_paths, serializeFinalizedRecordingManifest(
+                                      m_recording_id, m_submitted_frame_count, video, sidecar));
+            m_store.activateFinalized(m_artifact_paths);
             m_state = RecordingState::e_FINALIZED;
         } catch (...) {
             m_state = RecordingState::e_FAULTED;
@@ -234,6 +243,7 @@ class RecordingManager::Impl {
 
     RecordingManagerConfig m_config;
     RecordingStore m_store;
+    RecordingArtifactPaths m_artifact_paths;
     std::vector<std::shared_ptr<const CapturedFrame>> m_queue;
     mutable std::mutex m_mutex;
     std::condition_variable m_frame_available;

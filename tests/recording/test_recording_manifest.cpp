@@ -76,4 +76,18 @@ TEST(RecordingSidecarWriter, RejectsIndexAndIdentityGaps) {
     EXPECT_THROW(writer.append(makeEntry(1U, 42U)), std::invalid_argument);
 }
 
+TEST(RecordingManifest, CalculatesBoundedSha256ForRegularArtifact) {
+    TemporarySidecarDirectory directory;
+    const std::filesystem::path artifact = directory.getPath() / "artifact.bin";
+    {
+        std::ofstream output(artifact, std::ios::binary);
+        output << "abc";
+    }
+    const RecordingArtifactDigest digest =
+        calculateRecordingArtifactDigest(directory.getPath(), "artifact.bin");
+    EXPECT_EQ(digest.size_bytes, 3U);
+    EXPECT_EQ(digest.sha256_hex,
+              "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+}
+
 }  // namespace nodus_vision
