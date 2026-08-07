@@ -155,6 +155,12 @@ TEST(PilotIntegrationClient, UsesOneSequenceForStateHeartbeatAndBoundedDisconnec
     const std::vector<std::pair<std::string, std::string>> requests = server.getRequests();
     ASSERT_GE(requests.size(), 3U);
     EXPECT_EQ(requests.front().first, "/api/v1/components/register");
+    EXPECT_EQ(boost::json::parse(requests.front().second)
+                  .as_object()
+                  .at("metadata")
+                  .as_object()
+                  .at("provider_api_version"),
+              "1.1.0");
     EXPECT_EQ(requests.back().first, "/api/v1/components/opaque%2Fsession%20secret/disconnect");
     std::uint64_t previous_sequence = 0U;
     for (const auto& request : requests) {

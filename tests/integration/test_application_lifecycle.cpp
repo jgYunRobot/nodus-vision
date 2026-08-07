@@ -9,6 +9,7 @@
 #include <boost/asio.hpp>
 #include <boost/beast.hpp>
 #include <boost/beast/http.hpp>
+#include <boost/json.hpp>
 #include <chrono>
 #include <memory>
 #include <string>
@@ -187,11 +188,24 @@ TEST(VisionApplication, ServesFakeDataPlaneAndRestartsCleanly) {
         requestResponse(first_port, http::verb::get, "/metadata");
     EXPECT_NE(metadata.body().find("/stream/color.mjpg"), std::string::npos);
     EXPECT_NE(metadata.body().find("/query/roi_depth"), std::string::npos);
+    EXPECT_EQ(boost::json::parse(metadata.body()).as_object().at("api_version"), "1.1.0");
     const http::response<http::string_body> health =
         requestResponse(first_port, http::verb::get, "/health");
-    EXPECT_NE(health.body().find("\"pilot\""), std::string::npos);
-    EXPECT_NE(health.body().find("\"disabled\""), std::string::npos);
-
+    const boost::json::object health_json = boost::json::parse(health.body()).as_object();
+    ASSERT_EQ(health_json.size(), 6U);
+    EXPECT_EQ(health_json.at("schema_version"), 1);
+    EXPECT_EQ(health_json.at("state"), "ready");
+    ASSERT_TRUE(health_json.at("pilot").is_object());
+    const boost::json::object& pilot = health_json.at("pilot").as_object();
+    ASSERT_EQ(pilot.size(), 8U);
+    EXPECT_FALSE(pilot.at("enabled").as_bool());
+    EXPECT_EQ(pilot.at("state"), "disabled");
+    EXPECT_TRUE(pilot.at("server_instance_id").is_null());
+    EXPECT_EQ(pilot.at("catalog_generation"), 0U);
+    EXPECT_EQ(pilot.at("descriptor_count"), 0);
+    EXPECT_EQ(pilot.at("retry_count"), 0);
+    EXPECT_TRUE(pilot.at("last_success_age_ms").is_null());
+    EXPECT_TRUE(pilot.at("last_error").is_null());
     const http::response<http::string_body> query =
         requestResponse(first_port, http::verb::post, "/query/pixel_to_point", "{\"x\":1,\"y\":1}");
     EXPECT_EQ(query.result(), http::status::ok);

@@ -17,3 +17,10 @@ add_test(
         -DPILOT_PROVENANCE=${CMAKE_SOURCE_DIR}/schemas/pilot/v1/provenance.json
         -P ${CMAKE_CURRENT_SOURCE_DIR}/verify_pilot_contract.cmake
 )
+
+add_test(
+    NAME contract_test_vision_health_openapi
+    COMMAND ${CMAKE_COMMAND}
+        -DVISION_OPENAPI=${CMAKE_SOURCE_DIR}/schemas/vision/v1/openapi.yaml
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/verify_vision_health_openapi.cmake
+)

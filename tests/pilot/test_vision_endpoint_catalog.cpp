@@ -37,6 +37,14 @@ TEST(VisionEndpointCatalog, BuildsStableDirectColorCatalog) {
     const boost::json::object object = boost::json::parse(publication).as_object();
     EXPECT_EQ(object.at("descriptors").as_array().size(), 9U);
     EXPECT_EQ(object.at("descriptors").as_array().at(0).as_object().at("service"), nullptr);
+    EXPECT_EQ(object.at("descriptors")
+                  .as_array()
+                  .at(0)
+                  .as_object()
+                  .at("metadata")
+                  .as_object()
+                  .at("api_version"),
+              "1.1.0");
 }
 
 TEST(VisionEndpointCatalog, OmitsOnlyColorDescriptorsWhenColorIsDisabled) {

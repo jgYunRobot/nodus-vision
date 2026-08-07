@@ -1,5 +1,70 @@
 # Progress
 
+## 2026-08-08 - Phase 4 R4-A health contract parity
+
+### Changes
+
+- Promoted the additive Vision Provider API version from `1.0.0` to `1.1.0`; the stable `v1`
+  schema IDs remain unchanged.
+- Declared the existing redacted Pilot snapshot as the exact `/health` OpenAPI field set, including
+  nullable unavailable values and bounds for generation, descriptor, retry, and age values.
+- Aligned runtime metadata, Vision catalog descriptor metadata, and Pilot registration metadata with
+  `1.1.0`.
+
+### Status
+
+- R4-A is complete. R4-B through R4-E remain required before FFmpeg or recording implementation.
+- No Pilot source import, payload relay, recording dependency, filesystem artifact, or hardware path
+  was added.
+
+### Validation
+
+- Targeted contract, catalog, fake-Pilot integration, and application lifecycle CTest selection
+  passed (4/4), including the serialized disabled-Pilot `/health` fixture and OpenAPI contract check.
+- `clang-format-18` (host version 18.1.3) formatted the changed C++ files and `git diff --check`
+  passed.
+
+## 2026-08-08 - Phase 4 implementation review and Phase 5 recording design
+
+### Changes
+
+- Reviewed the complete `dacc6a5..cb86cdd` Phase 4 commit range and recorded six actionable
+  findings covering public health contract drift, a lifecycle stop-flag data race, unbounded
+  replacement recovery, inaccurate success age, stale state recovery, and incomplete response
+  validation.
+- Added an R4 remediation gate that must close the Phase 4 findings before adding recording threads
+  or FFmpeg dependencies.
+- Added the Phase 5 recording-artifact detailed design with FFmpeg/libx264 provenance, bounded
+  capture ingress, idempotent HTTP lifecycle, append-only frame mapping, immutable staging/finalized
+  storage, checksummed manifests, atomic activation, and MetaGate handoff fixtures.
+
+### Status
+
+- Phase 4 structure and reported 17/17 tests are preserved, but completion is conditionally reopened
+  until the three P1 and three P2 review findings are remediated.
+- Phase 5 is implementation-ready only after the R4 gate. Recording implementation, FFmpeg build
+  integration, filesystem artifacts, provider routes, and Pilot descriptor changes were not added.
+- Phase 6 geometry, Phase 7 product integration, and Phase 8 physical hardware acceptance remain
+  excluded.
+
+### Validation
+
+- Confirmed a clean `main...origin/main` worktree before documentation changes and reviewed all 37
+  files changed by the seven Phase 4 checkpoints.
+- `git diff --check dacc6a5..HEAD` passed; static search confirmed no Pilot source import or payload
+  relay was introduced.
+- Re-read the pinned Pilot lifecycle/catalog contract and the PA-CONTROL recording writer,
+  append-only `frames.jsonl`, manifest, and recording HTTP behavior at migration revision
+  `1c44efbe0b03fa77187305d0f50948f731e972f0`.
+- Build and CTest were not rerun for this review/design-only task. The implementation report remains
+  17/17 plus 50 repeated lifecycle/application runs; no hardware or external process was executed.
+
+### Next goals
+
+- Give Terra one task that closes R4-A through R4-E, verifies the unchanged Phase 4 baseline, and
+  only then executes P5-0 through P5-7 in order.
+- Stop after Phase 5 acceptance and request separate Phase 6 authorization.
+
 ## 2026-08-08 - Phase 4 P4-6 acceptance and handoff
 
 ### Changes

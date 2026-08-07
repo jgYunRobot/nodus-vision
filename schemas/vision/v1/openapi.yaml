@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Nodus Vision Provider API
-  version: 1.0.0
+  version: 1.1.0
   description: >-
     Trusted same-host or LAN camera payload API. Component discovery is handled separately by
     Nodus Pilot; image, depth, query, and point-cloud payloads are served directly by Vision.
@@ -332,7 +332,7 @@ components:
     HealthResponse:
       type: object
       additionalProperties: false
-      required: [schema_version, state, server, camera, last_error]
+      required: [schema_version, state, server, camera, pilot, last_error]
       properties:
         schema_version:
           const: 1
@@ -371,6 +371,32 @@ components:
             latest_frame_age_ms: {type: integer, minimum: -1}
             timeout_count: {type: integer, minimum: 0}
             drop_count: {type: integer, minimum: 0}
+        pilot:
+          type: object
+          additionalProperties: false
+          required:
+            - enabled
+            - state
+            - server_instance_id
+            - catalog_generation
+            - descriptor_count
+            - retry_count
+            - last_success_age_ms
+            - last_error
+          properties:
+            enabled: {type: boolean}
+            state:
+              enum: [disabled, registering, online, recovering, contract_fault, stopping, stopped]
+            server_instance_id:
+              type: [string, 'null']
+            catalog_generation: {type: integer, minimum: 0}
+            descriptor_count: {type: integer, minimum: 0}
+            retry_count: {type: integer, minimum: 0}
+            last_success_age_ms:
+              type: [integer, 'null']
+              minimum: 0
+            last_error:
+              type: [string, 'null']
         last_error:
           type: [string, 'null']
     MetadataResponse:
@@ -388,7 +414,7 @@ components:
         schema_version:
           const: 1
         api_version:
-          const: '1.0.0'
+          const: '1.1.0'
         device_id:
           type: string
         adapter:

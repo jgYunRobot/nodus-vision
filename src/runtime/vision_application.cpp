@@ -186,7 +186,7 @@ std::string makeMetadataJson(const VisionConfig& config) {
 
     boost::json::object root;
     root["schema_version"] = 1;
-    root["api_version"] = "1.0.0";
+    root["api_version"] = "1.1.0";
     root["device_id"] = config.device_id;
     root["adapter"] = config.adapter;
     root["advertised_base_url"] = config.provider.advertised_base_url;
