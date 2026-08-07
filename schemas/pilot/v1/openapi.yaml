@@ -1,0 +1,3247 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Nodus Pilot Public API",
+    "version": "1.0.2"
+  },
+  "paths": {
+    "/api/v1/health": {
+      "get": {
+        "summary": "Read Pilot process health and readiness",
+        "responses": {
+          "200": {
+            "description": "Current Pilot health",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/snapshot": {
+      "get": {
+        "summary": "Read the authoritative redacted Pilot snapshot",
+        "responses": {
+          "200": {
+            "description": "Current Pilot snapshot",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PilotSnapshot"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/components": {
+      "get": {
+        "summary": "List live external components without session tokens",
+        "responses": {
+          "200": {
+            "description": "Current live component projections",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ComponentsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/controls/{control_id}/status": {
+      "get": {
+        "summary": "Read the latest Pilot-owned Control status projection",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ControlId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Latest Control status and freshness",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlStatusResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/api/v1/controls/{control_id}/status/samples": {
+      "get": {
+        "summary": "Read retained Control status samples after a cursor",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ControlId"
+          },
+          {
+            "$ref": "#/components/parameters/AfterSequence"
+          },
+          {
+            "$ref": "#/components/parameters/ConnectionGeneration"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bounded status sample batch with gap evidence",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlStatusSampleBatchResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/api/v1/controls/{control_id}/status/stream": {
+      "get": {
+        "summary": "Stream sampled Control status for UI and observers",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ControlId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "SSE stream whose robot_status data is ControlStatusResponse JSON",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/SseStream"
+                },
+                "x-sse-event-payloads": {
+                  "robot_status": {
+                    "$ref": "#/components/schemas/ControlStatusResponse"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/pilot/streams": {
+      "get": {
+        "summary": "List finite Pilot-owned sample stream descriptors",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/SampleControlId"
+          },
+          {
+            "$ref": "#/components/parameters/SampleStreamKind"
+          },
+          {
+            "$ref": "#/components/parameters/SampleSchemaId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Pilot stream descriptors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SampleStreamsResponse"
+                }
+              }
+            }
+          },
+          "400": {"$ref": "#/components/responses/BadRequest"}
+        }
+      }
+    },
+    "/api/v1/pilot/streams/subscription": {
+      "get": {
+        "summary": "Subscribe to selected Pilot sample streams",
+        "responses": {
+          "200": {"description": "Multiplexed latest or replay SSE", "content": {"text/event-stream": {"schema": {"$ref": "#/components/schemas/SseStream"}}}},
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "409": {"$ref": "#/components/responses/Conflict"},
+          "503": {"$ref": "#/components/responses/ServiceUnavailable"}
+        }
+      }
+    },
+    "/api/v1/pilot/streams/{stream_id}/samples": {
+      "get": {
+        "summary": "Read a bounded retained Pilot sample batch",
+        "parameters": [
+          {
+            "name": "stream_id",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string", "minLength": 1, "maxLength": 256}
+          }
+        ],
+        "responses": {
+          "200": {"description": "Sample batch", "content": {"application/json": {"schema": {"type": "object"}}}},
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "404": {"$ref": "#/components/responses/NotFound"},
+          "409": {"$ref": "#/components/responses/Conflict"}
+        }
+      }
+    },
+    "/api/v1/events/stream": {
+      "get": {
+        "summary": "Stream bounded Pilot operational events after an optional cursor",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/LastEventIdHeader"
+          },
+          {
+            "$ref": "#/components/parameters/LastEventIdQuery"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "SSE stream of PilotEventEnvelope data and explicit gap data",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/SseStream"
+                },
+                "x-sse-event-payloads": {
+                  "default": {
+                    "$ref": "#/components/schemas/PilotEventEnvelope"
+                  },
+                  "gap": {
+                    "$ref": "#/components/schemas/EventGapPayload"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/components/register": {
+      "post": {
+        "summary": "Register or replace one generic component session",
+        "description": "Registers the live component session used by lifecycle routes and, under the current role-neutral pass_through policy, by POST /api/v1/operations. A UI command producer registers with component_type ui and uses only the opaque session_id returned by this response; component_type and capabilities are descriptive and do not grant authority.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ComponentRegistrationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Server-owned opaque session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ComponentRegistrationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/components/{session_id}/heartbeat": {
+      "post": {
+        "summary": "Renew a component lease",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/SessionId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HeartbeatRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Lifecycle update accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LifecycleAcceptedResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          }
+        }
+      }
+    },
+    "/api/v1/components/{session_id}/state": {
+      "post": {
+        "summary": "Replace component diagnostic state and renew its lease",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/SessionId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ComponentStateUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Lifecycle update accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LifecycleAcceptedResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          }
+        }
+      }
+    },
+    "/api/v1/components/{session_id}/disconnect": {
+      "post": {
+        "summary": "Disconnect one component session",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/SessionId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DisconnectRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Lifecycle update accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LifecycleAcceptedResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          }
+        }
+      }
+    },
+    "/api/v1/endpoints": {
+      "get": {
+        "summary": "List currently advertised direct provider endpoints",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EndpointComponentId"
+          },
+          {
+            "$ref": "#/components/parameters/EndpointDescriptorId"
+          },
+          {
+            "$ref": "#/components/parameters/EndpointKind"
+          },
+          {
+            "$ref": "#/components/parameters/EndpointCapability"
+          },
+          {
+            "$ref": "#/components/parameters/EndpointContractVersion"
+          },
+          {
+            "$ref": "#/components/parameters/EndpointSchemaId"
+          },
+          {
+            "$ref": "#/components/parameters/EndpointLimit"
+          },
+          {
+            "$ref": "#/components/parameters/EndpointCursor"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bounded deterministic endpoint directory page",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EndpointDirectoryResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
+    "/api/v1/components/{session_id}/endpoint-catalog": {
+      "put": {
+        "summary": "Atomically replace one live component endpoint catalog",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/SessionId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EndpointCatalogPublicationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Catalog accepted or idempotently replayed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EndpointCatalogAcceptedResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/operations": {
+      "post": {
+        "summary": "Admit one external Control operation",
+        "description": "Accepts an operation from any live generic component session while source_policy is pass_through, including a component_type ui Portal session. session_id comes from ComponentRegistrationResponse. The command producer owns a separate operation (generation, sequence) cursor; it is not the lifecycle heartbeat/state sequence. On session replacement, expiry, or Pilot restart, the producer must stop active holds, re-register, reset the operation cursor for the new session, and must not replay a previous mutating request.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OperationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Correlated Control response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationResult"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Control frame written without execution acknowledgement",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Rejected result or admission conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationResultOrErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "500": {
+            "description": "Unexpected Pilot operation failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationResult"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable result or bounded HTTP admission capacity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationResultOrErrorResponse"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Correlated Control response exceeded its deadline",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "parameters": {
+      "SessionId": {
+        "name": "session_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "$ref": "#/components/schemas/Identifier"
+        }
+      },
+      "ControlId": {
+        "name": "control_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "$ref": "#/components/schemas/Identifier"
+        }
+      },
+      "SampleControlId": {
+        "name": "control_id",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "$ref": "#/components/schemas/Identifier"
+        }
+      },
+      "SampleStreamKind": {
+        "name": "stream_kind",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "enum": ["robot_status", "control_operation"]
+        }
+      },
+      "SampleSchemaId": {
+        "name": "schema_id",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "x-max-utf8-bytes": 256
+        }
+      },
+      "AfterSequence": {
+        "name": "after_sequence",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "$ref": "#/components/schemas/NonNegativeInt64",
+          "default": 0
+        }
+      },
+      "ConnectionGeneration": {
+        "name": "connection_generation",
+        "in": "query",
+        "required": false,
+        "description": "Required when after_sequence is non-zero.",
+        "schema": {
+          "$ref": "#/components/schemas/NonNegativeInt64"
+        }
+      },
+      "LastEventIdHeader": {
+        "name": "Last-Event-ID",
+        "in": "header",
+        "required": false,
+        "schema": {
+          "$ref": "#/components/schemas/NonNegativeInt64"
+        }
+      },
+      "LastEventIdQuery": {
+        "name": "last_event_id",
+        "in": "query",
+        "required": false,
+        "description": "Overrides Last-Event-ID when both cursors are supplied.",
+        "schema": {
+          "$ref": "#/components/schemas/NonNegativeInt64"
+        }
+      },
+      "EndpointComponentId": {
+        "name": "component_id",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "$ref": "#/components/schemas/Identifier"
+        }
+      },
+      "EndpointDescriptorId": {
+        "name": "descriptor_id",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "$ref": "#/components/schemas/Identifier"
+        }
+      },
+      "EndpointKind": {
+        "name": "kind",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "enum": ["service", "stream"]
+        }
+      },
+      "EndpointCapability": {
+        "name": "capability",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "$ref": "#/components/schemas/Identifier"
+        }
+      },
+      "EndpointContractVersion": {
+        "name": "contract_version",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        }
+      },
+      "EndpointSchemaId": {
+        "name": "schema_id",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "x-max-utf8-bytes": 256
+        }
+      },
+      "EndpointLimit": {
+        "name": "limit",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 128,
+          "default": 64
+        }
+      },
+      "EndpointCursor": {
+        "name": "cursor",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048,
+          "x-max-utf8-bytes": 2048
+        }
+      }
+    },
+    "responses": {
+      "BadRequest": {
+        "description": "Invalid request",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "Requested resource is unavailable",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            }
+          }
+        }
+      },
+      "Conflict": {
+        "description": "Request conflicts with current session or operation state",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            }
+          }
+        }
+      },
+      "PayloadTooLarge": {
+        "description": "Request body exceeds the configured bound",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            }
+          }
+        }
+      },
+      "UnsupportedMediaType": {
+        "description": "Request is not application/json",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            }
+          }
+        }
+      },
+      "ServiceUnavailable": {
+        "description": "Bounded service capacity or dependency is unavailable",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "Identifier": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128,
+        "x-max-utf8-bytes": 128
+      },
+      "DiagnosticString": {
+        "type": "string",
+        "maxLength": 1024,
+        "x-max-utf8-bytes": 1024
+      },
+      "ComponentType": {
+        "type": "string",
+        "enum": [
+          "input_source",
+          "camera",
+          "policy",
+          "ui",
+          "observer",
+          "service_provider"
+        ]
+      },
+      "EndpointProtocol": {
+        "type": "string",
+        "enum": [
+          "http",
+          "https"
+        ]
+      },
+      "EndpointMediaType": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128,
+        "x-max-utf8-bytes": 128
+      },
+      "EndpointSchemaId": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "minLength": 1,
+        "maxLength": 256,
+        "x-max-utf8-bytes": 256
+      },
+      "EndpointMetadata": {
+        "type": "object",
+        "x-max-encoded-utf8-bytes": 1024,
+        "x-max-json-depth": 4,
+        "additionalProperties": {
+          "$ref": "#/components/schemas/JsonDiagnosticValue"
+        }
+      },
+      "EndpointServiceContract": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "method",
+          "request_schema_id",
+          "response_schema_id"
+        ],
+        "properties": {
+          "method": {
+            "type": "string",
+            "enum": [
+              "GET",
+              "POST",
+              "PUT",
+              "DELETE"
+            ]
+          },
+          "request_schema_id": {
+            "$ref": "#/components/schemas/EndpointSchemaId"
+          },
+          "response_schema_id": {
+            "$ref": "#/components/schemas/EndpointSchemaId"
+          }
+        }
+      },
+      "EndpointStreamContract": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "clock_domain",
+          "stream_group_id"
+        ],
+        "properties": {
+          "clock_domain": {
+            "type": "string",
+            "enum": [
+              "monotonic_same_host",
+              "unix_epoch_synchronized",
+              "provider_defined"
+            ]
+          },
+          "stream_group_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "maxLength": 128,
+            "x-max-utf8-bytes": 128
+          }
+        }
+      },
+      "EndpointServiceDescriptor": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "descriptor_id",
+          "kind",
+          "capability",
+          "contract_version",
+          "protocol",
+          "endpoint",
+          "media_type",
+          "schema_id",
+          "metadata",
+          "service",
+          "stream"
+        ],
+        "properties": {
+          "descriptor_id": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "kind": {
+            "const": "service"
+          },
+          "capability": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "contract_version": {
+            "$ref": "#/components/schemas/PositiveInt64"
+          },
+          "protocol": {
+            "$ref": "#/components/schemas/EndpointProtocol"
+          },
+          "endpoint": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048,
+            "x-max-utf8-bytes": 2048,
+            "format": "uri"
+          },
+          "media_type": {
+            "$ref": "#/components/schemas/EndpointMediaType"
+          },
+          "schema_id": {
+            "$ref": "#/components/schemas/EndpointSchemaId"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/EndpointMetadata"
+          },
+          "service": {
+            "$ref": "#/components/schemas/EndpointServiceContract"
+          },
+          "stream": {
+            "type": "null"
+          }
+        }
+      },
+      "EndpointStreamDescriptor": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "descriptor_id",
+          "kind",
+          "capability",
+          "contract_version",
+          "protocol",
+          "endpoint",
+          "media_type",
+          "schema_id",
+          "metadata",
+          "service",
+          "stream"
+        ],
+        "properties": {
+          "descriptor_id": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "kind": {
+            "const": "stream"
+          },
+          "capability": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "contract_version": {
+            "$ref": "#/components/schemas/PositiveInt64"
+          },
+          "protocol": {
+            "$ref": "#/components/schemas/EndpointProtocol"
+          },
+          "endpoint": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048,
+            "x-max-utf8-bytes": 2048,
+            "format": "uri"
+          },
+          "media_type": {
+            "$ref": "#/components/schemas/EndpointMediaType"
+          },
+          "schema_id": {
+            "$ref": "#/components/schemas/EndpointSchemaId"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/EndpointMetadata"
+          },
+          "service": {
+            "type": "null"
+          },
+          "stream": {
+            "$ref": "#/components/schemas/EndpointStreamContract"
+          }
+        }
+      },
+      "EndpointDescriptor": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/EndpointServiceDescriptor"
+          },
+          {
+            "$ref": "#/components/schemas/EndpointStreamDescriptor"
+          }
+        ],
+        "discriminator": {
+          "propertyName": "kind",
+          "mapping": {
+            "service": "#/components/schemas/EndpointServiceDescriptor",
+            "stream": "#/components/schemas/EndpointStreamDescriptor"
+          }
+        }
+      },
+      "EndpointCatalogPublicationRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "publication_id",
+          "expected_catalog_generation",
+          "descriptors"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "publication_id": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "expected_catalog_generation": {
+            "$ref": "#/components/schemas/NonNegativeInt64"
+          },
+          "descriptors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EndpointDescriptor"
+            }
+          }
+        }
+      },
+      "EndpointDirectoryEntry": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "component_id",
+          "instance_id",
+          "component_type",
+          "session_generation",
+          "catalog_generation",
+          "descriptor"
+        ],
+        "properties": {
+          "component_id": {"$ref": "#/components/schemas/Identifier"},
+          "instance_id": {"$ref": "#/components/schemas/Identifier"},
+          "component_type": {"$ref": "#/components/schemas/ComponentType"},
+          "session_generation": {"$ref": "#/components/schemas/PositiveInt64"},
+          "catalog_generation": {"$ref": "#/components/schemas/PositiveInt64"},
+          "descriptor": {"$ref": "#/components/schemas/EndpointDescriptor"}
+        }
+      },
+      "EndpointDirectoryResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["server_instance_id", "catalog_revision", "endpoints", "next_cursor"],
+        "properties": {
+          "server_instance_id": {"$ref": "#/components/schemas/Identifier"},
+          "catalog_revision": {"$ref": "#/components/schemas/NonNegativeInt64"},
+          "endpoints": {"type": "array", "maxItems": 128, "items": {"$ref": "#/components/schemas/EndpointDirectoryEntry"}},
+          "next_cursor": {"type": ["string", "null"], "maxLength": 2048, "x-max-utf8-bytes": 2048}
+        }
+      },
+      "EndpointCatalogAcceptedResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["status", "server_instance_id", "component_id", "session_generation", "catalog_generation", "catalog_revision", "descriptor_count"],
+        "properties": {
+          "status": {"const": "accepted"},
+          "server_instance_id": {"$ref": "#/components/schemas/Identifier"},
+          "component_id": {"$ref": "#/components/schemas/Identifier"},
+          "session_generation": {"$ref": "#/components/schemas/PositiveInt64"},
+          "catalog_generation": {"$ref": "#/components/schemas/PositiveInt64"},
+          "catalog_revision": {"$ref": "#/components/schemas/PositiveInt64"},
+          "descriptor_count": {"$ref": "#/components/schemas/NonNegativeInt64"}
+        }
+      },
+      "JsonDiagnosticValue": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/DiagnosticString"
+          },
+          {
+            "type": "number",
+            "minimum": -9223372036854775807,
+            "maximum": 9223372036854775807
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "null"
+          },
+          {
+            "type": "array",
+            "maxItems": 128,
+            "items": {
+              "$ref": "#/components/schemas/JsonDiagnosticValue"
+            }
+          },
+          {
+            "type": "object",
+            "maxProperties": 128,
+            "propertyNames": {
+              "$ref": "#/components/schemas/DiagnosticString"
+            },
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonDiagnosticValue"
+            }
+          }
+        ]
+      },
+      "CommonState": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "health",
+          "reason",
+          "details"
+        ],
+        "x-max-encoded-utf8-bytes": 8192,
+        "x-max-json-depth": 8,
+        "properties": {
+          "health": {
+            "type": "string",
+            "enum": [
+              "starting",
+              "ready",
+              "degraded",
+              "faulted",
+              "stopping"
+            ]
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 256,
+            "x-max-utf8-bytes": 256
+          },
+          "details": {
+            "type": "object",
+            "maxProperties": 128,
+            "propertyNames": {
+              "$ref": "#/components/schemas/DiagnosticString"
+            },
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonDiagnosticValue"
+            }
+          }
+        }
+      },
+      "ComponentRegistrationRequest": {
+        "description": "Creates one generic live component session. In pass_through deployments, a UI that produces Control operations registers component_type ui and capability control.operation.v1, then submits operations with the returned session_id. component_type and capabilities remain descriptive rather than authorization claims.",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "component_id",
+          "instance_id",
+          "component_type",
+          "protocol_version",
+          "supported_schema_versions",
+          "capabilities",
+          "service_endpoints",
+          "initial_state",
+          "started_at",
+          "metadata",
+          "clock_domain"
+        ],
+        "properties": {
+          "component_id": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "instance_id": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "component_type": {
+            "$ref": "#/components/schemas/ComponentType"
+          },
+          "protocol_version": {
+            "const": 1
+          },
+          "supported_schema_versions": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 16,
+            "items": {
+              "$ref": "#/components/schemas/PositiveInt64"
+            }
+          },
+          "capabilities": {
+            "type": "array",
+            "maxItems": 32,
+            "items": {
+              "$ref": "#/components/schemas/Identifier"
+            }
+          },
+          "service_endpoints": {
+            "type": "object",
+            "maxProperties": 0,
+            "additionalProperties": false
+          },
+          "initial_state": {
+            "$ref": "#/components/schemas/CommonState"
+          },
+          "started_at": {
+            "$ref": "#/components/schemas/NonNegativeInt64"
+          },
+          "metadata": {
+            "type": "object",
+            "maxProperties": 128,
+            "propertyNames": {
+              "$ref": "#/components/schemas/DiagnosticString"
+            },
+            "x-max-encoded-utf8-bytes": 8192,
+            "x-max-json-depth": 8,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonDiagnosticValue"
+            }
+          },
+          "clock_domain": {
+            "description": "Declares the clock domain used by operation source_timestamp_ns. The current operation admission profile enables monotonic_same_host only; cross-host browser command production is not part of this profile.",
+            "type": "string",
+            "enum": [
+              "monotonic_same_host",
+              "unix_epoch_synchronized"
+            ]
+          }
+        }
+      },
+      "ComponentRegistrationResponse": {
+        "description": "Returns the opaque live session used for heartbeat, state, disconnect, endpoint publication, and operation submission. A replacement registration invalidates the earlier session.",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "session_id",
+          "server_instance_id",
+          "accepted_protocol_version",
+          "accepted_schema_versions",
+          "heartbeat_interval_ms",
+          "lease_timeout_ms",
+          "server_time"
+        ],
+        "properties": {
+          "session_id": {
+            "description": "Opaque server-owned live session identity. UI and other command producers copy this value into OperationRequest.session_id and do not infer, persist across replacement, or expose it through public component projections.",
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "server_instance_id": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "accepted_protocol_version": {
+            "const": 1
+          },
+          "accepted_schema_versions": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 16,
+            "items": {
+              "const": 1
+            }
+          },
+          "heartbeat_interval_ms": {
+            "$ref": "#/components/schemas/PositiveInt64"
+          },
+          "lease_timeout_ms": {
+            "$ref": "#/components/schemas/PositiveInt64"
+          },
+          "server_time": {
+            "description": "Pilot monotonic nanoseconds at registration response creation. A same-host browser may conservatively map its monotonic performance.now() clock by recording performance.now() when this response is received and then using server_time plus subsequent local elapsed monotonic time. This intentionally backdates timestamps by response transit time. The browser must cancel holds and re-register after wake, clock discontinuity, session loss, or Pilot restart. This mapping does not make a cross-host browser a monotonic_same_host source.",
+            "$ref": "#/components/schemas/NonNegativeInt64"
+          }
+        }
+      },
+      "HeartbeatRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "sequence"
+        ],
+        "properties": {
+          "sequence": {
+            "$ref": "#/components/schemas/NonNegativeInt64"
+          }
+        }
+      },
+      "ComponentStateUpdate": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "sequence",
+          "state"
+        ],
+        "properties": {
+          "sequence": {
+            "$ref": "#/components/schemas/NonNegativeInt64"
+          },
+          "state": {
+            "$ref": "#/components/schemas/CommonState"
+          }
+        }
+      },
+      "DisconnectRequest": {
+        "type": "object",
+        "additionalProperties": false
+      },
+      "NonNegativeInt64": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9223372036854775807
+      },
+      "PositiveInt64": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 9223372036854775807
+      },
+      "NullableNonNegativeInt64": {
+        "type": [
+          "integer",
+          "null"
+        ],
+        "minimum": 0,
+        "maximum": 9223372036854775807
+      },
+      "NullableString": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "NullableFiniteNumber": {
+        "type": [
+          "number",
+          "null"
+        ]
+      },
+      "Readiness": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "api_ready",
+          "control_connected",
+          "component_registry_ready",
+          "active_source_ready",
+          "required_observations_ready",
+          "command_forwarding_enabled",
+          "degraded_reasons"
+        ],
+        "properties": {
+          "api_ready": {
+            "type": "boolean"
+          },
+          "control_connected": {
+            "type": "boolean"
+          },
+          "component_registry_ready": {
+            "type": "boolean"
+          },
+          "active_source_ready": {
+            "type": "boolean"
+          },
+          "required_observations_ready": {
+            "type": "boolean"
+          },
+          "command_forwarding_enabled": {
+            "type": "boolean"
+          },
+          "degraded_reasons": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "PublicComponent": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "component_id",
+          "instance_id",
+          "component_type",
+          "session_generation",
+          "capabilities",
+          "service_endpoints",
+          "state",
+          "metadata",
+          "registered_at_ns",
+          "last_heartbeat_ns",
+          "expires_at_ns",
+          "last_sequence",
+          "clock_domain",
+          "available"
+        ],
+        "properties": {
+          "component_id": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "instance_id": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "component_type": {
+            "$ref": "#/components/schemas/ComponentType"
+          },
+          "session_generation": {
+            "$ref": "#/components/schemas/PositiveInt64"
+          },
+          "capabilities": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Identifier"
+            }
+          },
+          "service_endpoints": {
+            "type": "object",
+            "maxProperties": 0,
+            "additionalProperties": false
+          },
+          "state": {
+            "$ref": "#/components/schemas/CommonState"
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonDiagnosticValue"
+            }
+          },
+          "registered_at_ns": {
+            "$ref": "#/components/schemas/NonNegativeInt64"
+          },
+          "last_heartbeat_ns": {
+            "$ref": "#/components/schemas/NonNegativeInt64"
+          },
+          "expires_at_ns": {
+            "$ref": "#/components/schemas/NonNegativeInt64"
+          },
+          "last_sequence": {
+            "$ref": "#/components/schemas/NonNegativeInt64"
+          },
+          "clock_domain": {
+            "type": "string",
+            "enum": [
+              "monotonic_same_host",
+              "unix_epoch_synchronized"
+            ]
+          },
+          "available": {
+            "const": true
+          }
+        }
+      },
+      "GatewayProjection": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "connection_state",
+          "configured_endpoint",
+          "connection_generation",
+          "connected_at_monotonic_ns",
+          "last_receive_at_monotonic_ns",
+          "last_write_at_monotonic_ns",
+          "last_status_at_monotonic_ns",
+          "pending_request_count",
+          "queued_write_count",
+          "protocol_mode",
+          "last_error_code",
+          "last_error_reason",
+          "has_fresh_status"
+        ],
+        "properties": {
+          "connection_state": {
+            "type": "string",
+            "enum": [
+              "disconnected",
+              "connecting",
+              "connected",
+              "degraded",
+              "stopping"
+            ]
+          },
+          "configured_endpoint": {
+            "type": "string"
+          },
+          "connection_generation": {
+            "$ref": "#/components/schemas/NonNegativeInt64"
+          },
+          "connected_at_monotonic_ns": {
+            "$ref": "#/components/schemas/NullableNonNegativeInt64"
+          },
+          "last_receive_at_monotonic_ns": {
+            "$ref": "#/components/schemas/NullableNonNegativeInt64"
+          },
+          "last_write_at_monotonic_ns": {
+            "$ref": "#/components/schemas/NullableNonNegativeInt64"
+          },
+          "last_status_at_monotonic_ns": {
+            "$ref": "#/components/schemas/NullableNonNegativeInt64"
+          },
+          "pending_request_count": {
+            "$ref": "#/components/schemas/NonNegativeInt64"
+          },
+          "queued_write_count": {
+            "$ref": "#/components/schemas/NonNegativeInt64"
+          },
+          "protocol_mode": {
+            "type": "string"
+          },
+          "last_error_code": {
+            "$ref": "#/components/schemas/NullableString"
+          },
+          "last_error_reason": {
+            "$ref": "#/components/schemas/NullableString"
+          },
+          "has_fresh_status": {
+            "type": "boolean"
+          }
+        }
+      },
+      "CompactControlStatusSample": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "sample_sequence",
+          "source_timestamp_ns",
+          "pilot_receive_monotonic_ns"
+        ],
+        "properties": {
+          "sample_sequence": {
+            "$ref": "#/components/schemas/PositiveInt64"
+          },
+          "source_timestamp_ns": {
+            "$ref": "#/components/schemas/NonNegativeInt64"
+          },
+          "pilot_receive_monotonic_ns": {
+            "$ref": "#/components/schemas/NonNegativeInt64"
+          }
+        }
+      },
+      "ControlStatusProjection": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "available",
+          "fresh",
+          "stale",
+          "age_ms",
+          "request_pending",
+          "connection_generation",
+          "last_success_monotonic_ns",
+          "last_failure_monotonic_ns",
+          "configured_polling_hz",
+          "measured_polling_hz",
+          "missed_poll_count",
+          "timeout_count",
+          "gateway_queue_high_watermark",
+          "sample"
+        ],
+        "properties": {
+          "available": {
+            "type": "boolean"
+          },
+          "fresh": {
+            "type": "boolean"
+          },
+          "stale": {
+            "type": "boolean"
+          },
+          "age_ms": {
+            "$ref": "#/components/schemas/NullableFiniteNumber"
+          },
+          "request_pending": {
+            "type": "boolean"
+          },
+          "connection_generation": {
+            "$ref": "#/components/schemas/NonNegativeInt64"
+          },
+          "last_success_monotonic_ns": {
+            "$ref": "#/components/schemas/NullableNonNegativeInt64"
+          },
+          "last_failure_monotonic_ns": {
+            "$ref": "#/components/schemas/NullableNonNegativeInt64"
+          },
+          "configured_polling_hz": {
+            "type": "number",
+            "minimum": 0
+          },
+          "measured_polling_hz": {
+            "type": "number",
+            "minimum": 0
+          },
+          "missed_poll_count": {
+            "$ref": "#/components/schemas/NonNegativeInt64"
+          },
+          "timeout_count": {
+            "$ref": "#/components/schemas/NonNegativeInt64"
+          },
+          "gateway_queue_high_watermark": {
+            "$ref": "#/components/schemas/NonNegativeInt64"
+          },
+          "sample": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/CompactControlStatusSample"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "ControlDeliveryProjection": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "operation_type",
+          "source_id",
+          "request_id",
+          "outcome",
+          "connection_generation",
+          "error_code",
+          "error_reason"
+        ],
+        "properties": {
+          "operation_type": {
+            "type": "string"
+          },
+          "source_id": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "request_id": {
+            "$ref": "#/components/schemas/NullableString"
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "written_unconfirmed",
+              "response_received",
+              "rejected_local",
+              "timed_out",
+              "disconnected",
+              "protocol_error",
+              "queue_full"
+            ]
+          },
+          "connection_generation": {
+            "$ref": "#/components/schemas/NonNegativeInt64"
+          },
+          "error_code": {
+            "$ref": "#/components/schemas/NullableString"
+          },
+          "error_reason": {
+            "$ref": "#/components/schemas/NullableString"
+          }
+        }
+      },
+      "LastExternalOperationProjection": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "request_id",
+          "operation",
+          "component_id",
+          "instance_id",
+          "control_id",
+          "pilot_disposition",
+          "delivery_outcome",
+          "error_code"
+        ],
+        "properties": {
+          "request_id": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "operation": {
+            "type": "string"
+          },
+          "component_id": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "instance_id": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "control_id": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "pilot_disposition": {
+            "type": "string",
+            "enum": [
+              "rejected",
+              "forwarded",
+              "unknown"
+            ]
+          },
+          "delivery_outcome": {
+            "$ref": "#/components/schemas/NullableString"
+          },
+          "error_code": {
+            "$ref": "#/components/schemas/NullableString"
+          }
+        }
+      },
+      "ControlProjection": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "gateway",
+          "robot_state",
+          "status",
+          "last_delivery",
+          "last_external_operation"
+        ],
+        "properties": {
+          "gateway": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/GatewayProjection"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "robot_state": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/RobotStatusOperationResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ControlStatusProjection"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "last_delivery": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ControlDeliveryProjection"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "last_external_operation": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/LastExternalOperationProjection"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "PilotSnapshot": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "server_instance_id",
+          "revision",
+          "created_at_ns",
+          "readiness",
+          "components",
+          "control"
+        ],
+        "properties": {
+          "server_instance_id": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "revision": {
+            "$ref": "#/components/schemas/NonNegativeInt64"
+          },
+          "created_at_ns": {
+            "$ref": "#/components/schemas/NonNegativeInt64"
+          },
+          "readiness": {
+            "$ref": "#/components/schemas/Readiness"
+          },
+          "components": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PublicComponent"
+            }
+          },
+          "control": {
+            "$ref": "#/components/schemas/ControlProjection"
+          }
+        }
+      },
+      "HealthResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "status",
+          "server_instance_id",
+          "revision",
+          "readiness"
+        ],
+        "properties": {
+          "status": {
+            "const": "ok"
+          },
+          "server_instance_id": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "revision": {
+            "$ref": "#/components/schemas/NonNegativeInt64"
+          },
+          "readiness": {
+            "$ref": "#/components/schemas/Readiness"
+          }
+        }
+      },
+      "ComponentsResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "components",
+          "snapshot_revision"
+        ],
+        "properties": {
+          "components": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PublicComponent"
+            }
+          },
+          "snapshot_revision": {
+            "$ref": "#/components/schemas/NonNegativeInt64"
+          }
+        }
+      },
+      "LifecycleAcceptedResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "status",
+          "snapshot"
+        ],
+        "properties": {
+          "status": {
+            "const": "accepted"
+          },
+          "snapshot": {
+            "$ref": "#/components/schemas/PilotSnapshot"
+          }
+        }
+      },
+      "ErrorDetail": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "message"
+        ],
+        "properties": {
+          "code": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "error",
+          "snapshot"
+        ],
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/ErrorDetail"
+          },
+          "snapshot": {
+            "$ref": "#/components/schemas/PilotSnapshot"
+          }
+        }
+      },
+      "ControlStatusSample": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "sample_sequence",
+          "connection_generation",
+          "source_timestamp_ns",
+          "pilot_receive_monotonic_ns",
+          "robot_state"
+        ],
+        "properties": {
+          "sample_sequence": {
+            "$ref": "#/components/schemas/PositiveInt64"
+          },
+          "connection_generation": {
+            "$ref": "#/components/schemas/NonNegativeInt64"
+          },
+          "source_timestamp_ns": {
+            "$ref": "#/components/schemas/NonNegativeInt64"
+          },
+          "pilot_receive_monotonic_ns": {
+            "$ref": "#/components/schemas/NonNegativeInt64"
+          },
+          "robot_state": {
+            "$ref": "#/components/schemas/RobotStatusOperationResult"
+          }
+        }
+      },
+      "ControlStatusResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "control_id",
+          "available",
+          "fresh",
+          "stale",
+          "age_ms",
+          "request_pending",
+          "connection_generation",
+          "last_success_monotonic_ns",
+          "last_failure_monotonic_ns",
+          "configured_polling_hz",
+          "measured_polling_hz",
+          "missed_poll_count",
+          "timeout_count",
+          "gateway_queue_high_watermark",
+          "sample"
+        ],
+        "properties": {
+          "control_id": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "available": {
+            "type": "boolean"
+          },
+          "fresh": {
+            "type": "boolean"
+          },
+          "stale": {
+            "type": "boolean"
+          },
+          "age_ms": {
+            "$ref": "#/components/schemas/NullableFiniteNumber"
+          },
+          "request_pending": {
+            "type": "boolean"
+          },
+          "connection_generation": {
+            "$ref": "#/components/schemas/NonNegativeInt64"
+          },
+          "last_success_monotonic_ns": {
+            "$ref": "#/components/schemas/NullableNonNegativeInt64"
+          },
+          "last_failure_monotonic_ns": {
+            "$ref": "#/components/schemas/NullableNonNegativeInt64"
+          },
+          "configured_polling_hz": {
+            "type": "number",
+            "minimum": 0
+          },
+          "measured_polling_hz": {
+            "type": "number",
+            "minimum": 0
+          },
+          "missed_poll_count": {
+            "$ref": "#/components/schemas/NonNegativeInt64"
+          },
+          "timeout_count": {
+            "$ref": "#/components/schemas/NonNegativeInt64"
+          },
+          "gateway_queue_high_watermark": {
+            "$ref": "#/components/schemas/NonNegativeInt64"
+          },
+          "sample": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ControlStatusSample"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "ControlStatusSampleBatchResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "control_id",
+          "connection_generation",
+          "requested_connection_generation",
+          "requested_sequence",
+          "first_available_sequence",
+          "gap_detected",
+          "generation_changed",
+          "samples"
+        ],
+        "properties": {
+          "control_id": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "connection_generation": {
+            "$ref": "#/components/schemas/NonNegativeInt64"
+          },
+          "requested_connection_generation": {
+            "$ref": "#/components/schemas/NonNegativeInt64"
+          },
+          "requested_sequence": {
+            "$ref": "#/components/schemas/NonNegativeInt64"
+          },
+          "first_available_sequence": {
+            "$ref": "#/components/schemas/PositiveInt64"
+          },
+          "gap_detected": {
+            "type": "boolean"
+          },
+          "generation_changed": {
+            "type": "boolean"
+          },
+          "samples": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ControlStatusSample"
+            }
+          }
+        }
+      },
+      "PilotEventEnvelope": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "event_id",
+          "event_type",
+          "timestamp_ns",
+          "payload"
+        ],
+        "properties": {
+          "event_id": {
+            "$ref": "#/components/schemas/PositiveInt64"
+          },
+          "event_type": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "timestamp_ns": {
+            "$ref": "#/components/schemas/NonNegativeInt64"
+          },
+          "payload": {
+            "type": "object"
+          }
+        }
+      },
+      "EventGapPayload": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "requested_event_id",
+          "first_available_event_id",
+          "snapshot"
+        ],
+        "properties": {
+          "requested_event_id": {
+            "$ref": "#/components/schemas/NonNegativeInt64"
+          },
+          "first_available_event_id": {
+            "$ref": "#/components/schemas/PositiveInt64"
+          },
+          "snapshot": {
+            "$ref": "#/components/schemas/PilotSnapshot"
+          }
+        }
+      },
+      "SseStream": {
+        "type": "string",
+        "description": "UTF-8 Server-Sent Events stream with periodic comment keepalives."
+      },
+      "OperationResultOrErrorResponse": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/OperationResult"
+          },
+          {
+            "$ref": "#/components/schemas/ErrorResponse"
+          }
+        ]
+      },
+      "FiniteNumber": {
+        "type": "number"
+      },
+      "Vector100": {
+        "type": "array",
+        "maxItems": 100,
+        "items": {
+          "$ref": "#/components/schemas/FiniteNumber"
+        }
+      },
+      "Vector500": {
+        "type": "array",
+        "maxItems": 500,
+        "items": {
+          "$ref": "#/components/schemas/FiniteNumber"
+        }
+      },
+      "EmptyPayload": {
+        "type": "object",
+        "additionalProperties": false
+      },
+      "TargetPositionPayload": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "target_position"
+        ],
+        "properties": {
+          "target_position": {
+            "$ref": "#/components/schemas/Vector100"
+          }
+        }
+      },
+      "JointPositionPayload": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "joint_position"
+        ],
+        "properties": {
+          "joint_position": {
+            "$ref": "#/components/schemas/Vector500"
+          }
+        }
+      },
+      "EnabledPayload": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "enabled"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ReleasedPayload": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "released"
+        ],
+        "properties": {
+          "released": {
+            "type": "boolean"
+          }
+        }
+      },
+      "FrameTransform": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "x",
+          "y",
+          "z",
+          "r1",
+          "r2",
+          "r3",
+          "euler_type"
+        ],
+        "properties": {
+          "x": {
+            "$ref": "#/components/schemas/FiniteNumber"
+          },
+          "y": {
+            "$ref": "#/components/schemas/FiniteNumber"
+          },
+          "z": {
+            "$ref": "#/components/schemas/FiniteNumber"
+          },
+          "r1": {
+            "$ref": "#/components/schemas/FiniteNumber"
+          },
+          "r2": {
+            "$ref": "#/components/schemas/FiniteNumber"
+          },
+          "r3": {
+            "$ref": "#/components/schemas/FiniteNumber"
+          },
+          "euler_type": {
+            "type": "string",
+            "enum": [
+              "XYZ",
+              "XZY",
+              "YXZ",
+              "YZX",
+              "ZXY",
+              "ZYX",
+              "ZXZ",
+              "ZYZ"
+            ]
+          }
+        }
+      },
+      "RegisterFramePayload": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "frame_name",
+          "link_id",
+          "local_transform"
+        ],
+        "properties": {
+          "frame_name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "link_id": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2147483647
+          },
+          "local_transform": {
+            "$ref": "#/components/schemas/FrameTransform"
+          }
+        }
+      },
+      "MoveJointOnlineRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "request_id",
+          "operation",
+          "session_id",
+          "generation",
+          "sequence",
+          "source_timestamp_ns",
+          "ttl_ms",
+          "control_id",
+          "payload"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "request_id": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "operation": {
+            "const": "control.move_joint_online"
+          },
+          "session_id": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "generation": {
+            "$ref": "#/components/schemas/NonNegativeInt64"
+          },
+          "sequence": {
+            "$ref": "#/components/schemas/NonNegativeInt64"
+          },
+          "source_timestamp_ns": {
+            "$ref": "#/components/schemas/NonNegativeInt64"
+          },
+          "ttl_ms": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000
+          },
+          "control_id": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/TargetPositionPayload"
+          }
+        }
+      },
+      "MoveJointOfflineRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "request_id",
+          "operation",
+          "session_id",
+          "generation",
+          "sequence",
+          "source_timestamp_ns",
+          "ttl_ms",
+          "control_id",
+          "payload"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "request_id": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "operation": {
+            "const": "control.move_joint_offline"
+          },
+          "session_id": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "generation": {
+            "$ref": "#/components/schemas/NonNegativeInt64"
+          },
+          "sequence": {
+            "$ref": "#/components/schemas/NonNegativeInt64"
+          },
+          "source_timestamp_ns": {
+            "$ref": "#/components/schemas/NonNegativeInt64"
+          },
+          "ttl_ms": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000
+          },
+          "control_id": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/TargetPositionPayload"
+          }
+        }
+      },
+      "MoveTaskOnlineRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "request_id",
+          "operation",
+          "session_id",
+          "generation",
+          "sequence",
+          "source_timestamp_ns",
+          "ttl_ms",
+          "control_id",
+          "payload"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "request_id": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "operation": {
+            "const": "control.move_task_online"
+          },
+          "session_id": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "generation": {
+            "$ref": "#/components/schemas/NonNegativeInt64"
+          },
+          "sequence": {
+            "$ref": "#/components/schemas/NonNegativeInt64"
+          },
+          "source_timestamp_ns": {
+            "$ref": "#/components/schemas/NonNegativeInt64"
+          },
+          "ttl_ms": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000
+          },
+          "control_id": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/TargetPositionPayload"
+          }
+        }
+      },
+      "CalculateForwardKinematicsRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "request_id",
+          "operation",
+          "session_id",
+          "generation",
+          "sequence",
+          "source_timestamp_ns",
+          "ttl_ms",
+          "control_id",
+          "payload"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "request_id": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "operation": {
+            "const": "control.calculate_forward_kinematics"
+          },
+          "session_id": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "generation": {
+            "$ref": "#/components/schemas/NonNegativeInt64"
+          },
+          "sequence": {
+            "$ref": "#/components/schemas/NonNegativeInt64"
+          },
+          "source_timestamp_ns": {
+            "$ref": "#/components/schemas/NonNegativeInt64"
+          },
+          "ttl_ms": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000
+          },
+          "control_id": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/JointPositionPayload"
+          }
+        }
+      },
+      "GetRobotStatusRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "request_id",
+          "operation",
+          "session_id",
+          "generation",
+          "sequence",
+          "source_timestamp_ns",
+          "ttl_ms",
+          "control_id",
+          "payload"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "request_id": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "operation": {
+            "const": "control.get_robot_status"
+          },
+          "session_id": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "generation": {
+            "$ref": "#/components/schemas/NonNegativeInt64"
+          },
+          "sequence": {
+            "$ref": "#/components/schemas/NonNegativeInt64"
+          },
+          "source_timestamp_ns": {
+            "$ref": "#/components/schemas/NonNegativeInt64"
+          },
+          "ttl_ms": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000
+          },
+          "control_id": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/EmptyPayload"
+          }
+        }
+      },
+      "SetServoStateRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "request_id",
+          "operation",
+          "session_id",
+          "generation",
+          "sequence",
+          "source_timestamp_ns",
+          "ttl_ms",
+          "control_id",
+          "payload"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "request_id": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "operation": {
+            "const": "control.set_servo_state"
+          },
+          "session_id": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "generation": {
+            "$ref": "#/components/schemas/NonNegativeInt64"
+          },
+          "sequence": {
+            "$ref": "#/components/schemas/NonNegativeInt64"
+          },
+          "source_timestamp_ns": {
+            "$ref": "#/components/schemas/NonNegativeInt64"
+          },
+          "ttl_ms": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000
+          },
+          "control_id": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/EnabledPayload"
+          }
+        }
+      },
+      "ResetFaultRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "request_id",
+          "operation",
+          "session_id",
+          "generation",
+          "sequence",
+          "source_timestamp_ns",
+          "ttl_ms",
+          "control_id",
+          "payload"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "request_id": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "operation": {
+            "const": "control.reset_fault"
+          },
+          "session_id": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "generation": {
+            "$ref": "#/components/schemas/NonNegativeInt64"
+          },
+          "sequence": {
+            "$ref": "#/components/schemas/NonNegativeInt64"
+          },
+          "source_timestamp_ns": {
+            "$ref": "#/components/schemas/NonNegativeInt64"
+          },
+          "ttl_ms": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000
+          },
+          "control_id": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/EmptyPayload"
+          }
+        }
+      },
+      "ResetOriginRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "request_id",
+          "operation",
+          "session_id",
+          "generation",
+          "sequence",
+          "source_timestamp_ns",
+          "ttl_ms",
+          "control_id",
+          "payload"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "request_id": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "operation": {
+            "const": "control.reset_origin"
+          },
+          "session_id": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "generation": {
+            "$ref": "#/components/schemas/NonNegativeInt64"
+          },
+          "sequence": {
+            "$ref": "#/components/schemas/NonNegativeInt64"
+          },
+          "source_timestamp_ns": {
+            "$ref": "#/components/schemas/NonNegativeInt64"
+          },
+          "ttl_ms": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000
+          },
+          "control_id": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/EmptyPayload"
+          }
+        }
+      },
+      "SetBrakeStateRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "request_id",
+          "operation",
+          "session_id",
+          "generation",
+          "sequence",
+          "source_timestamp_ns",
+          "ttl_ms",
+          "control_id",
+          "payload"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "request_id": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "operation": {
+            "const": "control.set_brake_state"
+          },
+          "session_id": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "generation": {
+            "$ref": "#/components/schemas/NonNegativeInt64"
+          },
+          "sequence": {
+            "$ref": "#/components/schemas/NonNegativeInt64"
+          },
+          "source_timestamp_ns": {
+            "$ref": "#/components/schemas/NonNegativeInt64"
+          },
+          "ttl_ms": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000
+          },
+          "control_id": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/ReleasedPayload"
+          }
+        }
+      },
+      "RegisterFrameRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "request_id",
+          "operation",
+          "session_id",
+          "generation",
+          "sequence",
+          "source_timestamp_ns",
+          "ttl_ms",
+          "control_id",
+          "payload"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "request_id": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "operation": {
+            "const": "control.register_frame"
+          },
+          "session_id": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "generation": {
+            "$ref": "#/components/schemas/NonNegativeInt64"
+          },
+          "sequence": {
+            "$ref": "#/components/schemas/NonNegativeInt64"
+          },
+          "source_timestamp_ns": {
+            "$ref": "#/components/schemas/NonNegativeInt64"
+          },
+          "ttl_ms": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000
+          },
+          "control_id": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/RegisterFramePayload"
+          }
+        }
+      },
+      "OperationRequest": {
+        "description": "Closed union of Control operations submitted by a live generic component session. session_id is copied from ComponentRegistrationResponse. generation and sequence form a command-producer-owned cursor separate from lifecycle writes; sequence increases within a generation and a generation transition is allowed only after older in-flight operations finish. source_timestamp_ns uses the registered session clock domain. UI sessions follow the same contract as other command producers under pass_through.",
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/MoveJointOnlineRequest"
+          },
+          {
+            "$ref": "#/components/schemas/MoveJointOfflineRequest"
+          },
+          {
+            "$ref": "#/components/schemas/MoveTaskOnlineRequest"
+          },
+          {
+            "$ref": "#/components/schemas/CalculateForwardKinematicsRequest"
+          },
+          {
+            "$ref": "#/components/schemas/GetRobotStatusRequest"
+          },
+          {
+            "$ref": "#/components/schemas/SetServoStateRequest"
+          },
+          {
+            "$ref": "#/components/schemas/ResetFaultRequest"
+          },
+          {
+            "$ref": "#/components/schemas/ResetOriginRequest"
+          },
+          {
+            "$ref": "#/components/schemas/SetBrakeStateRequest"
+          },
+          {
+            "$ref": "#/components/schemas/RegisterFrameRequest"
+          }
+        ],
+        "discriminator": {
+          "propertyName": "operation",
+          "mapping": {
+            "control.move_joint_online": "#/components/schemas/MoveJointOnlineRequest",
+            "control.move_joint_offline": "#/components/schemas/MoveJointOfflineRequest",
+            "control.move_task_online": "#/components/schemas/MoveTaskOnlineRequest",
+            "control.calculate_forward_kinematics": "#/components/schemas/CalculateForwardKinematicsRequest",
+            "control.get_robot_status": "#/components/schemas/GetRobotStatusRequest",
+            "control.set_servo_state": "#/components/schemas/SetServoStateRequest",
+            "control.reset_fault": "#/components/schemas/ResetFaultRequest",
+            "control.reset_origin": "#/components/schemas/ResetOriginRequest",
+            "control.set_brake_state": "#/components/schemas/SetBrakeStateRequest",
+            "control.register_frame": "#/components/schemas/RegisterFrameRequest"
+          }
+        }
+      },
+      "OperationDelivery": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "outcome",
+          "connection_generation"
+        ],
+        "properties": {
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "written_unconfirmed",
+              "response_received",
+              "rejected_local",
+              "timed_out",
+              "disconnected",
+              "protocol_error",
+              "queue_full"
+            ]
+          },
+          "connection_generation": {
+            "$ref": "#/components/schemas/NonNegativeInt64"
+          }
+        }
+      },
+      "ControlOutcome": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "status",
+          "code",
+          "message"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "not_reported",
+              "accepted",
+              "rejected",
+              "completed"
+            ]
+          },
+          "code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "message": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "OperationError": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "message"
+        ],
+        "properties": {
+          "code": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "JointStateResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "pos",
+          "vel",
+          "acc",
+          "torque"
+        ],
+        "properties": {
+          "pos": {
+            "$ref": "#/components/schemas/Vector500"
+          },
+          "vel": {
+            "$ref": "#/components/schemas/Vector500"
+          },
+          "acc": {
+            "$ref": "#/components/schemas/Vector500"
+          },
+          "torque": {
+            "$ref": "#/components/schemas/Vector500"
+          }
+        }
+      },
+      "RobotInterfaceResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "robot_type",
+          "connected",
+          "dof",
+          "servo_activated",
+          "brake_released",
+          "brake_state_source",
+          "motion_gate_state",
+          "motion_gate_reason",
+          "expected_wkc",
+          "last_wkc",
+          "last_error"
+        ],
+        "properties": {
+          "schema_version": {
+            "$ref": "#/components/schemas/NonNegativeInt64"
+          },
+          "robot_type": {
+            "type": "string"
+          },
+          "connected": {
+            "type": "boolean"
+          },
+          "dof": {
+            "$ref": "#/components/schemas/NonNegativeInt64"
+          },
+          "servo_activated": {
+            "type": "boolean"
+          },
+          "brake_released": {
+            "type": "boolean"
+          },
+          "brake_state_source": {
+            "type": "string"
+          },
+          "motion_gate_state": {
+            "type": "string"
+          },
+          "motion_gate_reason": {
+            "type": "string"
+          },
+          "expected_wkc": {
+            "$ref": "#/components/schemas/NonNegativeInt64"
+          },
+          "last_wkc": {
+            "$ref": "#/components/schemas/NonNegativeInt64"
+          },
+          "last_error": {
+            "type": "string"
+          }
+        }
+      },
+      "RobotFrameResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "name",
+          "x",
+          "y",
+          "z",
+          "r1",
+          "r2",
+          "r3",
+          "euler_type"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/NonNegativeInt64"
+          },
+          "name": {
+            "type": "string"
+          },
+          "x": {
+            "$ref": "#/components/schemas/FiniteNumber"
+          },
+          "y": {
+            "$ref": "#/components/schemas/FiniteNumber"
+          },
+          "z": {
+            "$ref": "#/components/schemas/FiniteNumber"
+          },
+          "r1": {
+            "$ref": "#/components/schemas/FiniteNumber"
+          },
+          "r2": {
+            "$ref": "#/components/schemas/FiniteNumber"
+          },
+          "r3": {
+            "$ref": "#/components/schemas/FiniteNumber"
+          },
+          "euler_type": {
+            "type": "string",
+            "enum": [
+              "XYZ",
+              "XZY",
+              "YXZ",
+              "YZX",
+              "ZXY",
+              "ZYX",
+              "ZXZ",
+              "ZYZ"
+            ]
+          }
+        }
+      },
+      "RobotStatusOperationResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "timestamp_ns",
+          "real",
+          "desired",
+          "interface",
+          "frames"
+        ],
+        "properties": {
+          "timestamp_ns": {
+            "$ref": "#/components/schemas/NonNegativeInt64"
+          },
+          "real": {
+            "$ref": "#/components/schemas/JointStateResult"
+          },
+          "desired": {
+            "$ref": "#/components/schemas/JointStateResult"
+          },
+          "interface": {
+            "$ref": "#/components/schemas/RobotInterfaceResult"
+          },
+          "frames": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RobotFrameResult"
+            }
+          }
+        }
+      },
+      "RegisterFrameOperationResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "timestamp_ns",
+          "registered"
+        ],
+        "properties": {
+          "timestamp_ns": {
+            "$ref": "#/components/schemas/NonNegativeInt64"
+          },
+          "registered": {
+            "type": "boolean"
+          }
+        }
+      },
+      "OperationResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "request_id",
+          "operation",
+          "control_id",
+          "pilot_disposition",
+          "delivery",
+          "control_outcome",
+          "result",
+          "error"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "request_id": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "operation": {
+            "type": "string",
+            "enum": [
+              "control.move_joint_online",
+              "control.move_joint_offline",
+              "control.move_task_online",
+              "control.calculate_forward_kinematics",
+              "control.get_robot_status",
+              "control.set_servo_state",
+              "control.reset_fault",
+              "control.reset_origin",
+              "control.set_brake_state",
+              "control.register_frame"
+            ]
+          },
+          "control_id": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "pilot_disposition": {
+            "type": "string",
+            "enum": [
+              "rejected",
+              "forwarded",
+              "unknown"
+            ]
+          },
+          "delivery": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/OperationDelivery"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "control_outcome": {
+            "$ref": "#/components/schemas/ControlOutcome"
+          },
+          "result": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/RobotStatusOperationResult"
+              },
+              {
+                "$ref": "#/components/schemas/RegisterFrameOperationResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/OperationError"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "SampleStreamsResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["server_instance_id", "streams"],
+        "properties": {
+          "server_instance_id": {"$ref": "#/components/schemas/Identifier"},
+          "streams": {
+            "type": "array",
+            "items": {"$ref": "#/components/schemas/SampleStreamDescriptor"}
+          }
+        }
+      },
+      "SampleStreamDescriptor": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["stream_id", "owner", "control_id", "stream_kind", "schema_id", "schema_version", "source_clock_domains", "configured_production_hz", "retention_capacity", "recording_grade"],
+        "properties": {
+          "stream_id": {"type": "string", "minLength": 1, "maxLength": 256},
+          "owner": {"const": "pilot"},
+          "control_id": {"$ref": "#/components/schemas/Identifier"},
+          "stream_kind": {"type": "string", "enum": ["robot_status", "control_operation"]},
+          "schema_id": {"type": "string", "minLength": 1, "maxLength": 256},
+          "schema_version": {"const": 1},
+          "source_clock_domains": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1, "maxLength": 128}},
+          "configured_production_hz": {"type": ["number", "null"], "exclusiveMinimum": 0},
+          "retention_capacity": {"type": "integer", "minimum": 1},
+          "recording_grade": {"const": true}
+        }
+      },
+      "SampleEnvelope": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["schema_version", "server_instance_id", "owner", "stream_id", "stream_kind", "schema_id", "control_id", "stream_generation", "sequence", "source_clock_domain", "source_timestamp_ns", "pilot_receive_monotonic_ns", "pilot_publish_monotonic_ns", "payload"],
+        "properties": {
+          "schema_version": {"const": 1},
+          "server_instance_id": {"$ref": "#/components/schemas/Identifier"},
+          "owner": {"const": "pilot"},
+          "stream_id": {"type": "string", "minLength": 1, "maxLength": 256},
+          "stream_kind": {"type": "string", "enum": ["robot_status", "control_operation"]},
+          "schema_id": {"type": "string", "minLength": 1, "maxLength": 256},
+          "control_id": {"$ref": "#/components/schemas/Identifier"},
+          "stream_generation": {"type": "integer", "minimum": 0},
+          "sequence": {"type": "integer", "minimum": 1},
+          "source_clock_domain": {"type": "string", "minLength": 1, "maxLength": 128},
+          "source_timestamp_ns": {"type": "integer", "minimum": 0},
+          "pilot_receive_monotonic_ns": {"type": "integer", "minimum": 0},
+          "pilot_publish_monotonic_ns": {"type": "integer", "minimum": 0},
+          "payload": {"type": "object"}
+        }
+      }
+    }
+  }
+}

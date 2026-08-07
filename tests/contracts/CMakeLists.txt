@@ -9,3 +9,11 @@ add_test(
     COMMAND ${CMAKE_COMMAND} -DHEADER_ROOT=${CMAKE_SOURCE_DIR}/include/nodus_vision -P
         ${CMAKE_CURRENT_SOURCE_DIR}/verify_public_headers.cmake
 )
+
+add_test(
+    NAME contract_test_pilot_openapi_pin
+    COMMAND ${CMAKE_COMMAND}
+        -DPILOT_OPENAPI=${CMAKE_SOURCE_DIR}/schemas/pilot/v1/openapi.yaml
+        -DPILOT_PROVENANCE=${CMAKE_SOURCE_DIR}/schemas/pilot/v1/provenance.json
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/verify_pilot_contract.cmake
+)

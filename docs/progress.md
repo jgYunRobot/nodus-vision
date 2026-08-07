@@ -1,5 +1,78 @@
 # Progress
 
+## 2026-08-08 - Phase 4 P4-0 Pilot public contract pin
+
+### Changes
+
+- Imported the immutable Pilot OpenAPI 1.0.2 bytes under `schemas/pilot/v1/` with its exact
+  revision, source path, semantic version, and SHA-256 provenance.
+- Added a contract-level verifier for the pinned digest, OpenAPI/API versions, and the required
+  public registration, heartbeat, state, disconnect, and endpoint-catalog routes.
+- Updated the migration ledger to mark the public artifact as the consumed Phase 4 input. No Pilot
+  source, package, fixture, or runtime path was added.
+
+### Status
+
+- P4-0 is complete. The Phase 4 design and progress changes that preceded implementation are
+  preserved in this checkpoint; strict configuration, DTOs, catalog construction, and all runtime
+  integration remain pending P4-1 onward.
+- The pinned artifact digest is
+  `4c536a3b099a478f6af5420af63b5a32965913f8fc5943c655a55e8d2a3ed5a8`.
+
+### Validation
+
+- `cmake --preset debug` and `cmake --build --preset debug` passed.
+- `ctest --test-dir build/debug --output-on-failure` passed 13/13 with normal local execution.
+  The sandbox-only attempt failed only where it prohibited local fake-server socket setup and
+  librealsense udev monitor initialization; the elevated rerun verified the unchanged baseline.
+- The new `contract_test_pilot_openapi_pin` passed and the artifact SHA-256 matched provenance.
+- No Pilot process, Pilot source import, camera hardware, `/dev/bus/usb`, recording, or payload
+  relay was used.
+
+### Next goals
+
+- Implement P4-1 strict Pilot configuration, public DTO codec, deterministic catalog builder, and
+  network-free unit coverage.
+
+## 2026-08-08 - Phase 4 Pilot public integration detailed design
+
+### Changes
+
+- Added a Phase 4-only detailed design for consuming the pinned Pilot OpenAPI 1.0.2 contract through
+  a C++17 bounded HTTP client without importing Pilot source or relaying camera payloads.
+- Defined strict Pilot configuration, component/session identity, deterministic Vision endpoint
+  descriptors, catalog generation/idempotency rules, heartbeat/state sequencing, recovery error
+  classification, startup/shutdown ordering, redacted health, and hardware-independent acceptance.
+- Split implementation into P4-0 through P4-6 contract, config/codec, transport, lifecycle, catalog,
+  recovery, and acceptance checkpoints with path allowlists, stop gates, and Conventional Commits.
+
+### Status
+
+- Phase 4 is specified for implementation by a separate agent. No Pilot client, schema artifact,
+  runtime integration, test target, dependency, or provider behavior was implemented by this task.
+- Pilot OpenAPI revision `46d35dea702e71ae78aa2bb932a11e1bf5e79a73` remains the selected immutable
+  source; its observed SHA-256 still matches the current committed Pilot OpenAPI bytes.
+- Phase 5 recording, Phase 6 geometry, Phase 7 product integrations, and Phase 8 physical hardware
+  acceptance remain excluded.
+
+### Validation
+
+- Reviewed the repository and shared agent rules, the Phase 0-3 handoff, migration ledger, current
+  Vision runtime/config/provider surface, and the committed Pilot lifecycle/catalog OpenAPI.
+- Verified the recorded Pilot OpenAPI SHA-256 as
+  `4c536a3b099a478f6af5420af63b5a32965913f8fc5943c655a55e8d2a3ed5a8` at both the
+  selected source revision and current committed Pilot HEAD.
+- `git diff --check` is the required documentation validation; build and tests are not required for
+  this design-only task.
+- No source implementation, external service, Pilot process, camera device, or hardware path was
+  executed.
+
+### Next goals
+
+- Give Terra the Phase 4 implementation prompt and execute P4-0 through P4-6 in order, committing
+  only after each checkpoint gate passes.
+- Stop after Phase 4 acceptance and design Phase 5 recording separately.
+
 ## 2026-08-08 - Phase 3 completion review and MJPEG backpressure
 
 ### Changes

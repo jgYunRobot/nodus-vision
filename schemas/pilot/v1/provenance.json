@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "source_repository": "https://github.com/jgYunRobot/nodus-pilot",
+  "source_revision": "46d35dea702e71ae78aa2bb932a11e1bf5e79a73",
+  "source_path": "schemas/pilot/v1/openapi.yaml",
+  "semantic_version": "1.0.2",
+  "sha256": "4c536a3b099a478f6af5420af63b5a32965913f8fc5943c655a55e8d2a3ed5a8"
+}

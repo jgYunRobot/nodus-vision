@@ -17,10 +17,10 @@ The implementation phase should pin Pilot OpenAPI version `1.0.2` from revision
 `schemas/pilot/v1/openapi.yaml` is
 `4c536a3b099a478f6af5420af63b5a32965913f8fc5943c655a55e8d2a3ed5a8`.
 
-That contract already supplies generic component lifecycle and endpoint catalog publication.
-Vision must use those public HTTP routes rather than importing or linking Pilot implementation
-code. The contract artifact and provenance are added together at the Pilot-integration checkpoint,
-not during this design-only foundation.
+That contract already supplies generic component lifecycle and endpoint catalog publication. The
+immutable bytes and their provenance are pinned under `schemas/pilot/v1/` as the Phase 4 contract
+input. Vision must use those public HTTP routes rather than importing or linking Pilot
+implementation code.
 
 ## Native dependency observations
 
