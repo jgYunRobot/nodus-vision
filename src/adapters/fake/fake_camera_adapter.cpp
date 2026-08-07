@@ -43,9 +43,10 @@ int countSampleSlots(int width, int height, int stride_pixels)
 class FakeCapturedFrame final : public CapturedFrame,
                                 public std::enable_shared_from_this<FakeCapturedFrame> {
 public:
-    FakeCapturedFrame(FrameSnapshot snapshot, std::vector<std::uint8_t> color, std::vector<float> depth)
+    FakeCapturedFrame(FrameSnapshot snapshot, std::vector<std::uint8_t> color, std::vector<std::uint8_t> depth_preview, std::vector<float> depth)
         : m_snapshot(std::move(snapshot)),
           m_color(std::move(color)),
+          m_depth_preview(std::move(depth_preview)),
           m_depth(std::move(depth))
     {
     }
@@ -69,7 +70,14 @@ public:
         };
     }
 
-    std::optional<VideoFrameView> getDepthPreviewFrameView() const override { return std::nullopt; }
+    std::optional<VideoFrameView> getDepthPreviewFrameView() const override
+    {
+        const std::shared_ptr<const FakeCapturedFrame> owner = shared_from_this();
+        return VideoFrameView{m_snapshot.depth_profile.width, m_snapshot.depth_profile.height,
+            m_snapshot.depth_profile.width * 3, PixelFormat::e_RGB8,
+            std::shared_ptr<const void>(owner, static_cast<const void*>(this)), m_depth_preview.data(),
+            m_snapshot.identity};
+    }
 
     std::optional<PixelPointResult> queryPixelPoint(int pixel_x, int pixel_y) const override
     {
@@ -173,6 +181,7 @@ public:
 private:
     FrameSnapshot m_snapshot;
     std::vector<std::uint8_t> m_color;
+    std::vector<std::uint8_t> m_depth_preview;
     std::vector<float> m_depth;
 };
 
@@ -207,6 +216,7 @@ public:
         snapshot.has_color = true;
         snapshot.has_depth = true;
         std::vector<std::uint8_t> color(static_cast<std::size_t>(m_config.width * m_config.height * 3));
+        std::vector<std::uint8_t> depth_preview(static_cast<std::size_t>(m_config.width * m_config.height * 3));
         std::vector<float> depth(static_cast<std::size_t>(m_config.width * m_config.height));
         for (int y = 0; y < m_config.height; ++y) {
             for (int x = 0; x < m_config.width; ++x) {
@@ -215,11 +225,15 @@ public:
                 color.at(pixel_index * 3U + 1U) = static_cast<std::uint8_t>((y + m_config.pattern_seed) % 256U);
                 color.at(pixel_index * 3U + 2U) = static_cast<std::uint8_t>(m_next_frame_number % 256U);
                 depth.at(pixel_index) = (x == 0 && y == 0) ? 0.0F : DEPTH_BASE_M + DEPTH_X_STEP_M * x + DEPTH_Y_STEP_M * y;
+                const std::uint8_t intensity = static_cast<std::uint8_t>(std::min(255.0F, depth.at(pixel_index) * 100.0F));
+                depth_preview.at(pixel_index * 3U) = intensity;
+                depth_preview.at(pixel_index * 3U + 1U) = 0U;
+                depth_preview.at(pixel_index * 3U + 2U) = 255U - intensity;
             }
         }
         m_health.latest_identity = snapshot.identity;
         m_health.latest_frame_age_ms = 0;
-        return std::make_shared<FakeCapturedFrame>(std::move(snapshot), std::move(color), std::move(depth));
+        return std::make_shared<FakeCapturedFrame>(std::move(snapshot), std::move(color), std::move(depth_preview), std::move(depth));
     }
 
     FakeCameraAdapterConfig m_config;

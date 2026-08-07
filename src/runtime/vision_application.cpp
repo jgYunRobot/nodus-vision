@@ -109,6 +109,13 @@ void VisionApplication::startApplication()
                         preview->jpeg = encodeRgbJpeg(*color, 90);
                         m_p_impl->m_preview_cache.publishPreview(PreviewKind::e_COLOR, preview);
                     }
+                    const std::optional<VideoFrameView> depth = frame->getDepthPreviewFrameView();
+                    if (depth.has_value()) {
+                        std::shared_ptr<EncodedPreview> preview = std::make_shared<EncodedPreview>();
+                        preview->identity = depth->identity;
+                        preview->jpeg = encodeRgbJpeg(*depth, 90);
+                        m_p_impl->m_preview_cache.publishPreview(PreviewKind::e_DEPTH, preview);
+                    }
                 }
                 catch (const std::exception&) { break; }
                 std::this_thread::sleep_for(std::chrono::milliseconds(1000 / m_p_impl->m_config.fake.fps));

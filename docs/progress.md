@@ -1,5 +1,23 @@
 # Progress
 
+## 2026-08-08 - Phase 3 deterministic depth preview checkpoint
+
+### Changes
+
+- Added deterministic fake depth visualization bytes with the same immutable frame owner and identity
+  as the depth frame.
+- Wired depth preview JPEG encoding into the capture-loop latest-only depth cache alongside color.
+
+### Status
+
+- Depth preview production is available to the cache boundary. The direct depth snapshot/MJPEG route
+  and streaming/backpressure lifecycle remain in progress.
+
+### Validation
+
+- `cmake --build --preset debug` and `ctest --test-dir build/debug --output-on-failure` passed
+  11/11 hardware-independent tests. No D435 device access was attempted.
+
 ## 2026-08-07 - Phase 3 immutable query semantics checkpoint
 
 ### Changes
