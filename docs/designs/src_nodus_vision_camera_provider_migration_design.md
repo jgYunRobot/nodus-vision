@@ -92,6 +92,7 @@ virtual hierarchy는 만들지 않고, composition이 concrete adapter를 선택
 | GET | `/stream/color.mjpg` | color MJPEG stream | 초기 호환 유지 |
 | GET | `/stream/depth.mjpg` | display용 depth MJPEG | 초기 호환 유지 |
 | GET | `/snapshot/color` | Policy/consumer용 JPEG snapshot | 유지 |
+| GET | `/snapshot/depth` | display용 latest depth JPEG snapshot | preview 보조 endpoint로 추가 |
 | POST | `/query/roi_depth` | latest metric depth ROI 통계 | 유지 |
 | POST | `/query/pixel_to_point` | pixel/depth/camera point | 유지 |
 | GET | `/snapshot/pointcloud` | JSON RGB point cloud | debug compatibility로만 유지 |
@@ -409,6 +410,7 @@ Vision은 Pilot에 다음 descriptor를 필요한 기능만큼 publish한다.
 | `color-preview` | `camera.stream.color.preview` | stream | MJPEG |
 | `depth-preview` | `camera.stream.depth.preview` | stream | MJPEG |
 | `color-snapshot` | `camera.snapshot.color` | service | GET image/jpeg |
+| `depth-snapshot` | `camera.snapshot.depth.preview` | service | GET image/jpeg |
 | `roi-depth` | `camera.query.roi_depth` | service | POST JSON |
 | `pixel-to-point` | `camera.query.pixel_to_point` | service | POST JSON |
 | `pointcloud-binary` | `camera.snapshot.pointcloud` | service | GET binary |

@@ -1,3 +1,75 @@
+/**
+ * @file test_pcd1.cpp
+ * @brief PCD1 v2 exact byte contract와 invalid payload rejection을 검증한다.
+ */
+
 #include <gtest/gtest.h>
+
+#include <cmath>
+#include <cstdint>
+#include <limits>
+#include <stdexcept>
+#include <vector>
+
 #include "pcd1.hpp"
-namespace nodus_vision { TEST(Pcd1, RoundTripsAndRejectsTruncation){PointCloudSnapshot s;s.identity.frame_number=7;s.identity.capture_timestamp_ns=9;s.source_profile={4,3,30,PixelFormat::e_Z16};s.source_intrinsics.fx=2;s.source_intrinsics.fy=3;s.requested_stride_pixels=1;s.stride_pixels=2;s.points.push_back({{1.F,2.F,3.F},{4U,5U,6U}});auto b=writePcd1V2(s);EXPECT_EQ(b.size(),127U);auto r=readPcd1V2(b);EXPECT_EQ(r.identity.frame_number,7U);EXPECT_FLOAT_EQ(r.points[0].optical_point_m[2],3.F);EXPECT_EQ(r.points[0].color_rgb[1],5U);b.pop_back();EXPECT_THROW(readPcd1V2(b),std::invalid_argument);} }
+
+namespace nodus_vision {
+namespace {
+
+PointCloudSnapshot makePointCloud() {
+    PointCloudSnapshot snapshot;
+    snapshot.identity.frame_number = 0x0102030405060708ULL;
+    snapshot.identity.capture_timestamp_ns = 9;
+    snapshot.source_profile = {4, 3, 30, PixelFormat::e_Z16};
+    snapshot.source_intrinsics.fx = 2.0F;
+    snapshot.source_intrinsics.fy = 3.0F;
+    snapshot.source_intrinsics.ppx = 1.0F;
+    snapshot.source_intrinsics.ppy = 1.5F;
+    snapshot.requested_stride_pixels = 1;
+    snapshot.stride_pixels = 2;
+    snapshot.points.push_back({{1.0F, 2.0F, 3.0F}, {4U, 5U, 6U}});
+    return snapshot;
+}
+
+}  // namespace
+
+TEST(Pcd1, WritesExactLittleEndianHeaderAndRoundTrips) {
+    const std::vector<std::uint8_t> bytes = writePcd1V2(makePointCloud());
+    ASSERT_EQ(bytes.size(), 127U);
+    EXPECT_EQ(std::vector<std::uint8_t>(bytes.begin(), bytes.begin() + 8),
+              (std::vector<std::uint8_t>{'P', 'C', 'D', '1', 2U, 0U, 0U, 0U}));
+    EXPECT_EQ(std::vector<std::uint8_t>(bytes.begin() + 8, bytes.begin() + 16),
+              (std::vector<std::uint8_t>{8U, 7U, 6U, 5U, 4U, 3U, 2U, 1U}));
+    EXPECT_EQ(bytes.at(44), 0U);
+    EXPECT_EQ(bytes.at(45), 0U);
+    EXPECT_EQ(bytes.at(46), 0U);
+    EXPECT_EQ(bytes.at(47), 0U);
+
+    const PointCloudSnapshot decoded = readPcd1V2(bytes);
+    EXPECT_EQ(decoded.identity.frame_number, 0x0102030405060708ULL);
+    ASSERT_EQ(decoded.points.size(), 1U);
+    EXPECT_FLOAT_EQ(decoded.points.at(0).optical_point_m.at(2), 3.0F);
+    EXPECT_EQ(decoded.points.at(0).color_rgb.at(1), 5U);
+}
+
+TEST(Pcd1, RejectsMalformedAndUnboundedPayloads) {
+    std::vector<std::uint8_t> bytes = writePcd1V2(makePointCloud());
+    std::vector<std::uint8_t> truncated = bytes;
+    truncated.pop_back();
+    EXPECT_THROW(readPcd1V2(truncated), std::invalid_argument);
+    std::vector<std::uint8_t> trailing = bytes;
+    trailing.push_back(0U);
+    EXPECT_THROW(readPcd1V2(trailing), std::invalid_argument);
+    std::vector<std::uint8_t> invalid_reserved = bytes;
+    invalid_reserved.at(44) = 1U;
+    EXPECT_THROW(readPcd1V2(invalid_reserved), std::invalid_argument);
+
+    PointCloudSnapshot invalid = makePointCloud();
+    invalid.source_profile.width = 0;
+    EXPECT_THROW(writePcd1V2(invalid), std::invalid_argument);
+    invalid = makePointCloud();
+    invalid.points.at(0).optical_point_m.at(0) = std::numeric_limits<float>::quiet_NaN();
+    EXPECT_THROW(writePcd1V2(invalid), std::invalid_argument);
+}
+
+}  // namespace nodus_vision

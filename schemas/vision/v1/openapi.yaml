@@ -1,0 +1,498 @@
+openapi: 3.1.0
+info:
+  title: Nodus Vision Provider API
+  version: 1.0.0
+  description: >-
+    Trusted same-host or LAN camera payload API. Component discovery is handled separately by
+    Nodus Pilot; image, depth, query, and point-cloud payloads are served directly by Vision.
+security: []
+paths:
+  /health:
+    get:
+      operationId: getHealth
+      responses:
+        '200':
+          description: Current provider and camera health.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /metadata:
+    get:
+      operationId: getMetadata
+      responses:
+        '200':
+          description: Active provider capabilities and calibration identity.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetadataResponse'
+  /stream/color.mjpg:
+    get:
+      operationId: streamColorPreview
+      responses:
+        '200':
+          description: Latest-only color MJPEG stream with per-part frame headers.
+          content:
+            multipart/x-mixed-replace:
+              schema:
+                type: string
+                contentEncoding: binary
+        '409':
+          $ref: '#/components/responses/StreamDisabled'
+        '429':
+          $ref: '#/components/responses/StreamLimitReached'
+        '503':
+          $ref: '#/components/responses/NoFreshFrame'
+  /stream/depth.mjpg:
+    get:
+      operationId: streamDepthPreview
+      responses:
+        '200':
+          description: Latest-only colorized depth MJPEG stream for visualization.
+          content:
+            multipart/x-mixed-replace:
+              schema:
+                type: string
+                contentEncoding: binary
+        '429':
+          $ref: '#/components/responses/StreamLimitReached'
+        '503':
+          $ref: '#/components/responses/NoFreshFrame'
+  /snapshot/color:
+    get:
+      operationId: getColorSnapshot
+      responses:
+        '200':
+          description: Latest fresh color JPEG.
+          headers:
+            X-Nodus-Capture-Generation:
+              $ref: '#/components/headers/CaptureGeneration'
+            X-Nodus-Frame-Number:
+              $ref: '#/components/headers/FrameNumber'
+            X-Nodus-Capture-Timestamp-Ns:
+              $ref: '#/components/headers/CaptureTimestamp'
+            X-Nodus-Capture-Unix-Epoch-Ns:
+              $ref: '#/components/headers/CaptureUnixEpoch'
+            X-Nodus-Sensor-Frame:
+              $ref: '#/components/headers/SensorFrame'
+            X-Nodus-Calibration-Id:
+              $ref: '#/components/headers/CalibrationId'
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                contentEncoding: binary
+        '503':
+          $ref: '#/components/responses/NoFreshFrame'
+  /snapshot/depth:
+    get:
+      operationId: getDepthPreviewSnapshot
+      responses:
+        '200':
+          description: Latest fresh colorized depth JPEG for visualization.
+          headers:
+            X-Nodus-Capture-Generation:
+              $ref: '#/components/headers/CaptureGeneration'
+            X-Nodus-Frame-Number:
+              $ref: '#/components/headers/FrameNumber'
+            X-Nodus-Capture-Timestamp-Ns:
+              $ref: '#/components/headers/CaptureTimestamp'
+            X-Nodus-Capture-Unix-Epoch-Ns:
+              $ref: '#/components/headers/CaptureUnixEpoch'
+            X-Nodus-Sensor-Frame:
+              $ref: '#/components/headers/SensorFrame'
+            X-Nodus-Calibration-Id:
+              $ref: '#/components/headers/CalibrationId'
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                contentEncoding: binary
+        '503':
+          $ref: '#/components/responses/NoFreshFrame'
+  /query/roi_depth:
+    post:
+      operationId: queryRoiDepth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoiDepthRequest'
+      responses:
+        '200':
+          description: Metric depth statistics from one immutable frame.
+          headers:
+            X-Nodus-Capture-Generation:
+              $ref: '#/components/headers/CaptureGeneration'
+            X-Nodus-Frame-Number:
+              $ref: '#/components/headers/FrameNumber'
+            X-Nodus-Capture-Timestamp-Ns:
+              $ref: '#/components/headers/CaptureTimestamp'
+            X-Nodus-Capture-Unix-Epoch-Ns:
+              $ref: '#/components/headers/CaptureUnixEpoch'
+            X-Nodus-Sensor-Frame:
+              $ref: '#/components/headers/SensorFrame'
+            X-Nodus-Calibration-Id:
+              $ref: '#/components/headers/CalibrationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoiDepthResponse'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '409':
+          $ref: '#/components/responses/QueryFailed'
+        '503':
+          $ref: '#/components/responses/NoFreshFrame'
+  /query/pixel_to_point:
+    post:
+      operationId: queryPixelPoint
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PixelPointRequest'
+      responses:
+        '200':
+          description: Metric depth and raw camera optical point from one immutable frame.
+          headers:
+            X-Nodus-Capture-Generation:
+              $ref: '#/components/headers/CaptureGeneration'
+            X-Nodus-Frame-Number:
+              $ref: '#/components/headers/FrameNumber'
+            X-Nodus-Capture-Timestamp-Ns:
+              $ref: '#/components/headers/CaptureTimestamp'
+            X-Nodus-Capture-Unix-Epoch-Ns:
+              $ref: '#/components/headers/CaptureUnixEpoch'
+            X-Nodus-Sensor-Frame:
+              $ref: '#/components/headers/SensorFrame'
+            X-Nodus-Calibration-Id:
+              $ref: '#/components/headers/CalibrationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PixelPointResponse'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '409':
+          $ref: '#/components/responses/QueryFailed'
+        '503':
+          $ref: '#/components/responses/NoFreshFrame'
+  /snapshot/pointcloud.bin:
+    get:
+      operationId: getPointCloudSnapshot
+      responses:
+        '200':
+          description: PCD1 v2 little-endian raw optical point cloud.
+          headers:
+            X-Nodus-Capture-Generation:
+              $ref: '#/components/headers/CaptureGeneration'
+            X-Nodus-Frame-Number:
+              $ref: '#/components/headers/FrameNumber'
+            X-Nodus-Capture-Timestamp-Ns:
+              $ref: '#/components/headers/CaptureTimestamp'
+            X-Nodus-Capture-Unix-Epoch-Ns:
+              $ref: '#/components/headers/CaptureUnixEpoch'
+            X-Nodus-Sensor-Frame:
+              $ref: '#/components/headers/SensorFrame'
+            X-Nodus-Calibration-Id:
+              $ref: '#/components/headers/CalibrationId'
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                contentEncoding: binary
+        '503':
+          $ref: '#/components/responses/NoFreshFrame'
+components:
+  headers:
+    CaptureGeneration:
+      description: Provider-local capture generation.
+      schema:
+        type: integer
+        minimum: 1
+    FrameNumber:
+      description: Frame ordering value within the capture generation.
+      schema:
+        type: integer
+        minimum: 1
+    CaptureTimestamp:
+      description: Process-local monotonic capture timestamp in nanoseconds.
+      schema:
+        type: integer
+        format: int64
+    CaptureUnixEpoch:
+      description: Observed Unix epoch capture timestamp in nanoseconds.
+      schema:
+        type: integer
+        format: int64
+    SensorFrame:
+      description: Camera optical frame identifier.
+      schema:
+        type: string
+    CalibrationId:
+      description: Static camera calibration artifact identifier.
+      schema:
+        type: string
+  responses:
+    InvalidRequest:
+      description: Request JSON or coordinate bounds are invalid.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    QueryFailed:
+      description: Camera-local query could not complete on the selected frame.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NoFreshFrame:
+      description: No frame exists within the configured freshness bound.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    StreamDisabled:
+      description: The configured camera does not expose this stream.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    StreamLimitReached:
+      description: The bounded active stream-client limit is reached.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+  schemas:
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [schema_version, error]
+      properties:
+        schema_version:
+          const: 1
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message, retryable]
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            retryable:
+              type: boolean
+    FrameIdentity:
+      type: object
+      additionalProperties: false
+      required:
+        - capture_generation
+        - frame_number
+        - capture_timestamp_ns
+        - capture_unix_epoch_ns
+      properties:
+        capture_generation:
+          type: integer
+          minimum: 1
+        frame_number:
+          type: integer
+          minimum: 1
+        capture_timestamp_ns:
+          type: integer
+          format: int64
+        capture_unix_epoch_ns:
+          type: integer
+          format: int64
+    HealthResponse:
+      type: object
+      additionalProperties: false
+      required: [schema_version, state, server, camera, last_error]
+      properties:
+        schema_version:
+          const: 1
+        state:
+          enum: [starting, ready, degraded, stopping]
+        server:
+          type: object
+          additionalProperties: false
+          required:
+            - listening
+            - active_connections
+            - max_connections
+            - active_stream_clients
+            - max_stream_clients
+          properties:
+            listening: {type: boolean}
+            active_connections: {type: integer, minimum: 0}
+            max_connections: {type: integer, minimum: 1}
+            active_stream_clients: {type: integer, minimum: 0}
+            max_stream_clients: {type: integer, minimum: 1}
+        camera:
+          type: object
+          additionalProperties: false
+          required:
+            - state
+            - capture_generation
+            - latest_frame_number
+            - latest_frame_age_ms
+            - timeout_count
+            - drop_count
+          properties:
+            state:
+              enum: [disconnected, connected, streaming, degraded]
+            capture_generation: {type: integer, minimum: 0}
+            latest_frame_number: {type: integer, minimum: 0}
+            latest_frame_age_ms: {type: integer, minimum: -1}
+            timeout_count: {type: integer, minimum: 0}
+            drop_count: {type: integer, minimum: 0}
+        last_error:
+          type: [string, 'null']
+    MetadataResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - schema_version
+        - api_version
+        - device_id
+        - adapter
+        - advertised_base_url
+        - calibration
+        - endpoints
+      properties:
+        schema_version:
+          const: 1
+        api_version:
+          const: '1.0.0'
+        device_id:
+          type: string
+        adapter:
+          enum: [fake, intel_d435]
+        advertised_base_url:
+          type: string
+          format: uri
+        calibration:
+          type: object
+          additionalProperties: false
+          required: [calibration_id, sensor_frame, mount_frame]
+          properties:
+            calibration_id: {type: string}
+            sensor_frame: {type: string}
+            mount_frame: {type: string}
+        endpoints:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+    PixelRoi:
+      type: object
+      additionalProperties: false
+      required: [x, y, width, height]
+      properties:
+        x: {type: integer, minimum: 0}
+        y: {type: integer, minimum: 0}
+        width: {type: integer, minimum: 0}
+        height: {type: integer, minimum: 0}
+    RoiDepthRequest:
+      type: object
+      additionalProperties: false
+      required: [x, y, width, height]
+      properties:
+        x: {type: integer, minimum: 0}
+        y: {type: integer, minimum: 0}
+        width: {type: integer, minimum: 1}
+        height: {type: integer, minimum: 1}
+    RoiDepthResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - schema_version
+        - frame
+        - requested_roi
+        - roi
+        - stats
+        - median_pixel
+        - median_point_camera_m
+      properties:
+        schema_version:
+          const: 1
+        frame:
+          $ref: '#/components/schemas/FrameIdentity'
+        requested_roi:
+          $ref: '#/components/schemas/PixelRoi'
+        roi:
+          $ref: '#/components/schemas/PixelRoi'
+        stats:
+          type: object
+          additionalProperties: false
+          required:
+            - valid
+            - pixel_count
+            - valid_pixel_count
+            - fill_rate
+            - min_depth_m
+            - max_depth_m
+            - mean_depth_m
+            - median_depth_m
+          properties:
+            valid: {type: boolean}
+            pixel_count: {type: integer, minimum: 0}
+            valid_pixel_count: {type: integer, minimum: 0}
+            fill_rate: {type: number, minimum: 0, maximum: 1}
+            min_depth_m: {type: number, minimum: 0}
+            max_depth_m: {type: number, minimum: 0}
+            mean_depth_m: {type: number, minimum: 0}
+            median_depth_m: {type: number, minimum: 0}
+        median_pixel:
+          type: object
+          additionalProperties: false
+          required: [x, y]
+          properties:
+            x: {type: integer, minimum: 0}
+            y: {type: integer, minimum: 0}
+        median_point_camera_m:
+          $ref: '#/components/schemas/Point3'
+    PixelPointRequest:
+      type: object
+      additionalProperties: false
+      required: [x, y]
+      properties:
+        x: {type: integer, minimum: 0}
+        y: {type: integer, minimum: 0}
+    PixelPointResponse:
+      type: object
+      additionalProperties: false
+      required: [schema_version, frame, pixel, valid]
+      properties:
+        schema_version:
+          const: 1
+        frame:
+          $ref: '#/components/schemas/FrameIdentity'
+        pixel:
+          type: object
+          additionalProperties: false
+          required: [x, y]
+          properties:
+            x: {type: integer, minimum: 0}
+            y: {type: integer, minimum: 0}
+        valid:
+          type: boolean
+        depth_m:
+          type: number
+          minimum: 0
+        point_camera_m:
+          $ref: '#/components/schemas/Point3'
+        reason:
+          type: string
+    Point3:
+      type: object
+      additionalProperties: false
+      required: [x, y, z]
+      properties:
+        x: {type: number}
+        y: {type: number}
+        z: {type: number}

@@ -16,10 +16,9 @@ constexpr const char* VALID_CONFIG = R"json({
   "provider": {"bind_host": "127.0.0.1", "port": 0, "advertised_base_url": "http://127.0.0.1:8900", "max_connections": 4, "max_stream_clients": 2, "request_timeout_ms": 1000, "max_header_bytes": 8192, "max_body_bytes": 4096, "max_frame_age_ms": 1000}
 })json";
 
-} // namespace
+}  // namespace
 
-TEST(VisionConfig, ParsesStrictFakeProviderConfig)
-{
+TEST(VisionConfig, ParsesStrictFakeProviderConfig) {
     std::string input = VALID_CONFIG;
     input.replace(input.find("\"port\": 0"), std::string("\"port\": 0").size(), "\"port\": 8900");
     const VisionConfig config = parseVisionConfig(input);
@@ -29,8 +28,7 @@ TEST(VisionConfig, ParsesStrictFakeProviderConfig)
     EXPECT_EQ(config.calibration.camera_to_mount_matrix4x4.at(0), 1.0);
 }
 
-TEST(VisionConfig, RejectsUnknownAndWildcardAdvertiseFields)
-{
+TEST(VisionConfig, RejectsUnknownAndWildcardAdvertiseFields) {
     std::string unknown = VALID_CONFIG;
     unknown.replace(unknown.find("\"schema_version\""), 0U, "\"unknown\": 1,");
     EXPECT_THROW(parseVisionConfig(unknown), std::invalid_argument);
@@ -39,4 +37,17 @@ TEST(VisionConfig, RejectsUnknownAndWildcardAdvertiseFields)
     EXPECT_THROW(parseVisionConfig(wildcard), std::invalid_argument);
 }
 
-} // namespace nodus_vision
+TEST(VisionConfig, RejectsInactiveAdapterAndHeaderControlCharacters) {
+    std::string inactive = VALID_CONFIG;
+    const std::string fake_device_end = "\"pattern_seed\": 7}}";
+    inactive.replace(inactive.find(fake_device_end), fake_device_end.size(),
+                     "\"pattern_seed\": 7}, \"intel_d435\": {}}");
+    EXPECT_THROW(parseVisionConfig(inactive), std::invalid_argument);
+
+    std::string control_character = VALID_CONFIG;
+    control_character.replace(control_character.find("camera.fake_top"),
+                              std::string("camera.fake_top").size(), "camera.fake_top\\ninvalid");
+    EXPECT_THROW(parseVisionConfig(control_character), std::invalid_argument);
+}
+
+}  // namespace nodus_vision

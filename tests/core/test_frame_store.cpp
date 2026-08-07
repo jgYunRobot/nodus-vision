@@ -1,19 +1,19 @@
 #include <gtest/gtest.h>
 
 #include <atomic>
+#include <chrono>
 #include <memory>
-#include <thread>
-
 #include <nodus_vision/frame_store.hpp>
+#include <thread>
 
 namespace nodus_vision {
 namespace {
 
 class TestFrame final : public CapturedFrame {
-public:
-    TestFrame(std::uint64_t generation, std::uint64_t frame_number, std::shared_ptr<std::atomic<int>> lifetime)
-        : m_lifetime(std::move(lifetime))
-    {
+   public:
+    TestFrame(std::uint64_t generation, std::uint64_t frame_number,
+              std::shared_ptr<std::atomic<int>> lifetime)
+        : m_lifetime(std::move(lifetime)) {
         m_snapshot.identity.capture_generation = generation;
         m_snapshot.identity.frame_number = frame_number;
     }
@@ -22,31 +22,32 @@ public:
     const FrameSnapshot& getSnapshot() const noexcept override { return m_snapshot; }
     std::optional<VideoFrameView> getColorFrameView() const override { return std::nullopt; }
     std::optional<VideoFrameView> getDepthPreviewFrameView() const override { return std::nullopt; }
-    std::optional<PixelPointResult> queryPixelPoint(int, int) const override { return std::nullopt; }
+    std::optional<PixelPointResult> queryPixelPoint(int, int) const override {
+        return std::nullopt;
+    }
     RoiDepthResult queryDepthInRoi(int, int, int, int) const override { return {}; }
     PointCloudSnapshot buildPointCloudSnapshot(std::size_t, int) const override { return {}; }
 
-private:
+   private:
     FrameSnapshot m_snapshot;
     std::shared_ptr<std::atomic<int>> m_lifetime;
 };
 
-std::shared_ptr<const CapturedFrame> makeFrame(std::uint64_t generation, std::uint64_t frame_number)
-{
-    return std::make_shared<TestFrame>(generation, frame_number, std::make_shared<std::atomic<int>>(0));
+std::shared_ptr<const CapturedFrame> makeFrame(std::uint64_t generation,
+                                               std::uint64_t frame_number) {
+    return std::make_shared<TestFrame>(generation, frame_number,
+                                       std::make_shared<std::atomic<int>>(0));
 }
 
-} // namespace
+}  // namespace
 
-TEST(FrameStore, StartsEmptyAndRejectsNull)
-{
+TEST(FrameStore, StartsEmptyAndRejectsNull) {
     FrameStore store;
     EXPECT_EQ(store.acquireLatestFrame(), nullptr);
     EXPECT_FALSE(store.publishFrame(nullptr));
 }
 
-TEST(FrameStore, ReplacesOnlyWithNewerIdentity)
-{
+TEST(FrameStore, ReplacesOnlyWithNewerIdentity) {
     FrameStore store;
     EXPECT_TRUE(store.publishFrame(makeFrame(1U, 2U)));
     EXPECT_FALSE(store.publishFrame(makeFrame(1U, 2U)));
@@ -56,8 +57,7 @@ TEST(FrameStore, ReplacesOnlyWithNewerIdentity)
     EXPECT_EQ(store.acquireLatestFrame()->getSnapshot().identity.capture_generation, 2U);
 }
 
-TEST(FrameStore, RetainsOwnerAfterReplacement)
-{
+TEST(FrameStore, RetainsOwnerAfterReplacement) {
     FrameStore store;
     const std::shared_ptr<std::atomic<int>> lifetime = std::make_shared<std::atomic<int>>(0);
     std::shared_ptr<const CapturedFrame> first = std::make_shared<TestFrame>(1U, 1U, lifetime);
@@ -70,8 +70,7 @@ TEST(FrameStore, RetainsOwnerAfterReplacement)
     EXPECT_EQ(lifetime->load(), 1);
 }
 
-TEST(FrameStore, ConcurrentReadersSeeValidLatestOwner)
-{
+TEST(FrameStore, ConcurrentReadersSeeValidLatestOwner) {
     FrameStore store;
     std::atomic<bool> writer_done{false};
     std::atomic<int> read_count{0};
@@ -96,4 +95,21 @@ TEST(FrameStore, ConcurrentReadersSeeValidLatestOwner)
     EXPECT_GE(read_count.load(), 0);
 }
 
-} // namespace nodus_vision
+TEST(FrameStore, WaitsForNewerFrameAndRejectsStaleFrame) {
+    FrameStore store;
+    const FrameIdentity initial_identity{1U, 1U};
+    ASSERT_TRUE(store.publishFrame(makeFrame(1U, 1U)));
+    EXPECT_EQ(store.waitForFrameAfter(initial_identity, std::chrono::milliseconds(1)), nullptr);
+    EXPECT_NE(store.acquireFreshFrame(std::chrono::milliseconds(100)), nullptr);
+    std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    EXPECT_EQ(store.acquireFreshFrame(std::chrono::milliseconds(1)), nullptr);
+    ASSERT_TRUE(store.publishFrame(makeFrame(1U, 2U)));
+    EXPECT_EQ(store.waitForFrameAfter(initial_identity, std::chrono::milliseconds(1))
+                  ->getSnapshot()
+                  .identity.frame_number,
+              2U);
+    store.clear();
+    EXPECT_EQ(store.acquireLatestFrame(), nullptr);
+}
+
+}  // namespace nodus_vision

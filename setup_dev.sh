@@ -28,4 +28,4 @@ git -C "${project_root}" config --local submodule.recurse true
 
 echo "[setup_dev] submodule status:"
 git -C "${project_root}" submodule status --recursive
-echo "[setup_dev] foundation setup complete; native dependencies are added by migration checkpoints."
+echo "[setup_dev] development setup complete."

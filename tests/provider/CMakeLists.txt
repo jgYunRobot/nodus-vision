@@ -19,3 +19,14 @@ add_executable(provider_test_pcd1 test_pcd1.cpp)
 set_target_properties(provider_test_pcd1 PROPERTIES OUTPUT_NAME test_pcd1)
 target_link_libraries(provider_test_pcd1 PRIVATE nodus_vision_provider_http GTest::gtest_main)
 add_test(NAME provider_test_pcd1 COMMAND provider_test_pcd1)
+
+add_executable(provider_test_query_serializer test_query_serializer.cpp)
+set_target_properties(provider_test_query_serializer PROPERTIES OUTPUT_NAME test_query_serializer)
+target_link_libraries(
+    provider_test_query_serializer
+    PRIVATE
+        nodus_vision_provider_http
+        GTest::gtest_main
+)
+target_compile_features(provider_test_query_serializer PRIVATE cxx_std_17)
+add_test(NAME provider_test_query_serializer COMMAND provider_test_query_serializer)

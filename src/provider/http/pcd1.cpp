@@ -1,63 +1,190 @@
-/** @file pcd1.cpp @brief PCD1 v2 little-endian codec을 구현한다. */
+/**
+ * @file pcd1.cpp
+ * @brief PCD1 v2 little-endian codec을 구현한다.
+ */
+
 #include "pcd1.hpp"
+
+#include <cmath>
+#include <cstdint>
 #include <cstring>
+#include <limits>
 #include <stdexcept>
-namespace nodus_vision { namespace {
+#include <vector>
+
+namespace nodus_vision {
+namespace {
+
 constexpr std::size_t HEADER_SIZE = 112U;
 constexpr std::size_t POINT_SIZE = 15U;
+constexpr std::uint32_t FORMAT_VERSION = 2U;
 
-template<typename T> void append(std::vector<std::uint8_t>& output, T value)
-{
-    const std::size_t offset = output.size();
-    output.resize(offset + sizeof(T));
-    std::memcpy(output.data() + offset, &value, sizeof(T));
+static_assert(sizeof(float) == 4U && std::numeric_limits<float>::is_iec559,
+              "PCD1 v2 requires IEEE-754 binary32 float.");
+
+void appendUint32(std::vector<std::uint8_t>& output, std::uint32_t value) {
+    for (int byte_index = 0; byte_index < 4; ++byte_index) {
+        output.push_back(static_cast<std::uint8_t>((value >> (byte_index * 8)) & 0xFFU));
+    }
 }
 
-template<typename T> T read(const std::vector<std::uint8_t>& input, std::size_t& offset)
-{
-    if (offset + sizeof(T) > input.size()) {
+void appendUint64(std::vector<std::uint8_t>& output, std::uint64_t value) {
+    for (int byte_index = 0; byte_index < 8; ++byte_index) {
+        output.push_back(static_cast<std::uint8_t>((value >> (byte_index * 8)) & 0xFFU));
+    }
+}
+
+void appendInt64(std::vector<std::uint8_t>& output, std::int64_t value) {
+    std::uint64_t storage{0};
+    std::memcpy(&storage, &value, sizeof(storage));
+    appendUint64(output, storage);
+}
+
+void appendFloat32(std::vector<std::uint8_t>& output, float value) {
+    std::uint32_t storage{0};
+    std::memcpy(&storage, &value, sizeof(storage));
+    appendUint32(output, storage);
+}
+
+std::uint32_t readUint32(const std::vector<std::uint8_t>& input, std::size_t& offset) {
+    if (offset > input.size() || input.size() - offset < 4U) {
         throw std::invalid_argument("PCD1 payload is truncated.");
     }
-    T value{};
-    std::memcpy(&value, input.data() + offset, sizeof(T));
-    offset += sizeof(T);
+    std::uint32_t value{0};
+    for (int byte_index = 0; byte_index < 4; ++byte_index) {
+        value |= static_cast<std::uint32_t>(input.at(offset++)) << (byte_index * 8);
+    }
     return value;
 }
+
+std::uint64_t readUint64(const std::vector<std::uint8_t>& input, std::size_t& offset) {
+    if (offset > input.size() || input.size() - offset < 8U) {
+        throw std::invalid_argument("PCD1 payload is truncated.");
+    }
+    std::uint64_t value{0};
+    for (int byte_index = 0; byte_index < 8; ++byte_index) {
+        value |= static_cast<std::uint64_t>(input.at(offset++)) << (byte_index * 8);
+    }
+    return value;
 }
-std::vector<std::uint8_t> writePcd1V2(const PointCloudSnapshot& s){
- if(s.points.size()>(static_cast<std::size_t>(UINT32_MAX)-HEADER_SIZE)/POINT_SIZE)throw std::invalid_argument("PCD1 point count is too large.");
- std::vector<std::uint8_t> o; o.reserve(HEADER_SIZE+POINT_SIZE*s.points.size()); o.insert(o.end(),{'P','C','D','1'}); append<std::uint32_t>(o,2); append<std::uint64_t>(o,s.identity.frame_number); append<std::int64_t>(o,s.identity.capture_timestamp_ns); append<std::uint32_t>(o,s.source_profile.width); append<std::uint32_t>(o,s.source_profile.height); append<std::uint32_t>(o,s.requested_stride_pixels); append<std::uint32_t>(o,s.stride_pixels); append<std::uint32_t>(o,s.points.size()); append<std::uint32_t>(o,0); append<float>(o,s.source_intrinsics.fx);append<float>(o,s.source_intrinsics.fy);append<float>(o,s.source_intrinsics.ppx);append<float>(o,s.source_intrinsics.ppy); for(int i=0;i<12;++i)append<float>(o,(i%5==0)?1.F:0.F); for(const auto& p:s.points){append<float>(o,p.optical_point_m[0]);append<float>(o,p.optical_point_m[1]);append<float>(o,p.optical_point_m[2]);} for(const auto& p:s.points)o.insert(o.end(),p.color_rgb.begin(),p.color_rgb.end()); return o;
+
+std::int64_t readInt64(const std::vector<std::uint8_t>& input, std::size_t& offset) {
+    const std::uint64_t storage = readUint64(input, offset);
+    std::int64_t value{0};
+    std::memcpy(&value, &storage, sizeof(value));
+    return value;
 }
-PointCloudSnapshot readPcd1V2(const std::vector<std::uint8_t>& b){
-    if (b.size() < HEADER_SIZE || std::memcmp(b.data(), "PCD1", 4) != 0) {
+
+float readFloat32(const std::vector<std::uint8_t>& input, std::size_t& offset) {
+    const std::uint32_t storage = readUint32(input, offset);
+    float value{0.0F};
+    std::memcpy(&value, &storage, sizeof(value));
+    return value;
+}
+
+void validatePointCloud(const PointCloudSnapshot& snapshot) {
+    if (snapshot.source_profile.width <= 0 || snapshot.source_profile.height <= 0 ||
+        snapshot.requested_stride_pixels <= 0 || snapshot.stride_pixels <= 0) {
+        throw std::invalid_argument("PCD1 source dimensions and strides must be positive.");
+    }
+    if (snapshot.points.size() > std::numeric_limits<std::uint32_t>::max() ||
+        snapshot.points.size() >
+            (std::numeric_limits<std::size_t>::max() - HEADER_SIZE) / POINT_SIZE) {
+        throw std::invalid_argument("PCD1 point count is too large.");
+    }
+    for (const PointCloudPoint& point : snapshot.points) {
+        for (const float coordinate : point.optical_point_m) {
+            if (!std::isfinite(coordinate)) {
+                throw std::invalid_argument("PCD1 point coordinate must be finite.");
+            }
+        }
+    }
+}
+
+}  // namespace
+
+std::vector<std::uint8_t> writePcd1V2(const PointCloudSnapshot& snapshot) {
+    validatePointCloud(snapshot);
+    std::vector<std::uint8_t> output;
+    output.reserve(HEADER_SIZE + POINT_SIZE * snapshot.points.size());
+    output.insert(output.end(), {'P', 'C', 'D', '1'});
+    appendUint32(output, FORMAT_VERSION);
+    appendUint64(output, snapshot.identity.frame_number);
+    appendInt64(output, snapshot.identity.capture_timestamp_ns);
+    appendUint32(output, static_cast<std::uint32_t>(snapshot.source_profile.width));
+    appendUint32(output, static_cast<std::uint32_t>(snapshot.source_profile.height));
+    appendUint32(output, static_cast<std::uint32_t>(snapshot.requested_stride_pixels));
+    appendUint32(output, static_cast<std::uint32_t>(snapshot.stride_pixels));
+    appendUint32(output, static_cast<std::uint32_t>(snapshot.points.size()));
+    appendUint32(output, 0U);
+    appendFloat32(output, snapshot.source_intrinsics.fx);
+    appendFloat32(output, snapshot.source_intrinsics.fy);
+    appendFloat32(output, snapshot.source_intrinsics.ppx);
+    appendFloat32(output, snapshot.source_intrinsics.ppy);
+    for (int matrix_index = 0; matrix_index < 12; ++matrix_index) {
+        appendFloat32(output, matrix_index % 5 == 0 ? 1.0F : 0.0F);
+    }
+    for (const PointCloudPoint& point : snapshot.points) {
+        appendFloat32(output, point.optical_point_m.at(0));
+        appendFloat32(output, point.optical_point_m.at(1));
+        appendFloat32(output, point.optical_point_m.at(2));
+    }
+    for (const PointCloudPoint& point : snapshot.points) {
+        output.insert(output.end(), point.color_rgb.begin(), point.color_rgb.end());
+    }
+    return output;
+}
+
+PointCloudSnapshot readPcd1V2(const std::vector<std::uint8_t>& input) {
+    if (input.size() < HEADER_SIZE || std::memcmp(input.data(), "PCD1", 4U) != 0) {
         throw std::invalid_argument("PCD1 magic is invalid.");
     }
-    std::size_t o = 4;
-    if (read<std::uint32_t>(b, o) != 2) {
+    std::size_t offset = 4U;
+    if (readUint32(input, offset) != FORMAT_VERSION) {
         throw std::invalid_argument("PCD1 version is invalid.");
     }
-    PointCloudSnapshot s;
-    s.identity.frame_number = read<std::uint64_t>(b, o);
-    s.identity.capture_timestamp_ns = read<std::int64_t>(b, o);
-    s.source_profile.width = read<std::uint32_t>(b, o);
-    s.source_profile.height = read<std::uint32_t>(b, o);
-    s.requested_stride_pixels = read<std::uint32_t>(b, o);
-    s.stride_pixels = read<std::uint32_t>(b, o);
-    const std::uint32_t point_count = read<std::uint32_t>(b, o);
-    read<std::uint32_t>(b, o);
-    s.source_intrinsics.fx = read<float>(b, o); s.source_intrinsics.fy = read<float>(b, o);
-    s.source_intrinsics.ppx = read<float>(b, o); s.source_intrinsics.ppy = read<float>(b, o);
-    for (int index = 0; index < 12; ++index) { read<float>(b, o); }
-    if (b.size() != HEADER_SIZE + POINT_SIZE * static_cast<std::size_t>(point_count)) {
+
+    PointCloudSnapshot snapshot;
+    snapshot.identity.frame_number = readUint64(input, offset);
+    snapshot.identity.capture_timestamp_ns = readInt64(input, offset);
+    snapshot.source_profile.width = static_cast<int>(readUint32(input, offset));
+    snapshot.source_profile.height = static_cast<int>(readUint32(input, offset));
+    snapshot.requested_stride_pixels = static_cast<int>(readUint32(input, offset));
+    snapshot.stride_pixels = static_cast<int>(readUint32(input, offset));
+    const std::uint32_t point_count = readUint32(input, offset);
+    if (readUint32(input, offset) != 0U) {
+        throw std::invalid_argument("PCD1 reserved field is invalid.");
+    }
+    snapshot.source_intrinsics.fx = readFloat32(input, offset);
+    snapshot.source_intrinsics.fy = readFloat32(input, offset);
+    snapshot.source_intrinsics.ppx = readFloat32(input, offset);
+    snapshot.source_intrinsics.ppy = readFloat32(input, offset);
+    for (int matrix_index = 0; matrix_index < 12; ++matrix_index) {
+        (void)readFloat32(input, offset);
+    }
+
+    const std::size_t expected_size =
+        HEADER_SIZE + POINT_SIZE * static_cast<std::size_t>(point_count);
+    if (input.size() != expected_size) {
         throw std::invalid_argument("PCD1 length is invalid.");
     }
-    s.points.resize(point_count);
-    for (PointCloudPoint& point : s.points) {
-        point.optical_point_m = {read<float>(b, o), read<float>(b, o), read<float>(b, o)};
+    snapshot.points.resize(point_count);
+    for (PointCloudPoint& point : snapshot.points) {
+        point.optical_point_m = {
+            readFloat32(input, offset),
+            readFloat32(input, offset),
+            readFloat32(input, offset),
+        };
     }
-    for (PointCloudPoint& point : s.points) {
-        point.color_rgb = {read<std::uint8_t>(b, o), read<std::uint8_t>(b, o), read<std::uint8_t>(b, o)};
+    for (PointCloudPoint& point : snapshot.points) {
+        point.color_rgb = {
+            input.at(offset++),
+            input.at(offset++),
+            input.at(offset++),
+        };
     }
-    return s;
+    validatePointCloud(snapshot);
+    return snapshot;
 }
-} // namespace nodus_vision
+
+}  // namespace nodus_vision

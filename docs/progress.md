@@ -1,5 +1,60 @@
 # Progress
 
+## 2026-08-08 - Phase 3 completion review and MJPEG backpressure
+
+### Changes
+
+- Replaced the one-response-only HTTP session with a bounded registry that owns cancellable
+  long-lived color/depth MJPEG sessions, enforces an independent stream-client limit, collapses
+  overlapping notifications to one latest pending frame, and closes blocked writers during
+  bounded server shutdown.
+- Split JPEG encoding from the capture thread. Capture now publishes immutable latest frames while
+  one encoder worker skips superseded frames, updates generation-aware color/depth caches, and
+  notifies stream sessions without waiting for client socket writes.
+- Fixed application shutdown lock ordering, server restart, fresh-frame enforcement, query response
+  header propagation, full sensor/calibration identity headers, strict coordinate validation, and
+  runtime metadata/health endpoint and stream counts.
+- Hardened libjpeg fatal-error handling and input stride validation, and replaced host-endian PCD1
+  serialization with explicit little-endian encoding plus malformed/bounds/finite-value checks.
+- Replaced the incomplete nested-object configuration schema with the parser-matching Draft
+  2020-12 contract, added the Vision OpenAPI 1.0.0 and PCD1 v2 binary contract, and updated the
+  migration designs and README for the completed Phase 3 provider surface.
+- Added regression coverage for MJPEG part identity, stream admission, slow-writer cancellation,
+  server/application restart, fresh latest stores, direct runtime snapshots/queries, query JSON,
+  JPEG validation, and exact PCD1 bytes.
+
+### Status
+
+- Phase 3 is complete with hardware-independent fake-camera evidence. Direct health, metadata,
+  color/depth JPEG snapshots, color/depth MJPEG streams, ROI/pixel queries, and PCD1 v2 snapshots
+  are implemented with finite connection/client/payload bounds and latest-only backpressure.
+- Review fixes remain limited to the Phase 0-3 provider, contracts, tests, and documentation.
+  Pilot integration, recording, Portal/Operator/MetaGate/Control changes, and physical camera
+  acceptance were not added.
+- Phase 4 remains a separate authorization and must begin by revalidating and pinning the released
+  Pilot OpenAPI artifact.
+
+### Validation
+
+- `clang-format-18` completed on every changed C++ source/header/test file.
+- `cmake --preset debug` and `cmake --build --preset debug` passed.
+- Final `ctest --test-dir build/debug --output-on-failure` passed 12/12 hardware-independent tests.
+- The first final CTest run exposed one new test-only Boost.JSON numeric accessor mismatch; the test
+  was corrected to validate numeric meaning and the complete suite then passed.
+- `provider_test_http_server` and `integration_test_application_lifecycle` each passed 100 repeated
+  executions without an intermittent failure.
+- Draft 2020-12 schema validation accepted `assets/configs/examples/fake_camera.json`; the OpenAPI
+  document parsed as 3.1.0 with nine paths and no unresolved local references.
+- No physical D435, `/dev/bus/usb`, Pilot, recording, Portal, Operator, MetaGate, or Control process
+  was accessed.
+
+### Next goals
+
+- Stop at the Phase 3 gate and review the staged completion diff and checkpoint commit.
+- Start Phase 4 only after separate authorization, then import the immutable Pilot public contract
+  with provenance before implementing component registration, heartbeat, and endpoint catalog
+  recovery.
+
 ## 2026-08-08 - Phase 3 direct ROI and pixel query checkpoint
 
 ### Changes

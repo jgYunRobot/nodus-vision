@@ -1,20 +1,21 @@
 #include <gtest/gtest.h>
+#include <jpeglib.h>
 
 #include <chrono>
 #include <csetjmp>
-
-#include <jpeglib.h>
+#include <stdexcept>
+#include <vector>
 
 #include "fake_camera_adapter.hpp"
 #include "jpeg_encoder.hpp"
 
 namespace nodus_vision {
-TEST(JpegEncoder, EncodesDeterministicFakeRgbFrame)
-{
+TEST(JpegEncoder, EncodesDeterministicFakeRgbFrame) {
     FakeCameraAdapter adapter({4, 3, 30, 1U, 7U, true, false, false, "fake"});
     adapter.connectCamera();
     adapter.startStream();
-    const std::shared_ptr<const CapturedFrame> frame = adapter.readFrame(std::chrono::milliseconds(1));
+    const std::shared_ptr<const CapturedFrame> frame =
+        adapter.readFrame(std::chrono::milliseconds(1));
     const std::optional<VideoFrameView> view = frame->getColorFrameView();
     ASSERT_TRUE(view.has_value());
     const std::vector<std::uint8_t> jpeg = encodeRgbJpeg(*view, 90);
@@ -31,4 +32,17 @@ TEST(JpegEncoder, EncodesDeterministicFakeRgbFrame)
     EXPECT_EQ(decoder.image_height, 3U);
     jpeg_destroy_decompress(&decoder);
 }
-} // namespace nodus_vision
+
+TEST(JpegEncoder, RejectsInvalidStrideAndQuality) {
+    std::vector<std::uint8_t> pixels(12U, 0U);
+    VideoFrameView view;
+    view.width = 2;
+    view.height = 2;
+    view.stride_bytes = 5;
+    view.format = PixelFormat::e_RGB8;
+    view.p_data = pixels.data();
+    EXPECT_THROW(encodeRgbJpeg(view, 90), std::invalid_argument);
+    view.stride_bytes = 6;
+    EXPECT_THROW(encodeRgbJpeg(view, 0), std::invalid_argument);
+}
+}  // namespace nodus_vision

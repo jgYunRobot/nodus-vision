@@ -573,6 +573,7 @@ depth preview는 visualization용 colorized JPEG다. metric depth source나 Poli
 | GET | `/stream/color.mjpg` | multipart MJPEG | color preview |
 | GET | `/stream/depth.mjpg` | multipart MJPEG | colorized depth preview |
 | GET | `/snapshot/color` | `image/jpeg` | latest color observation |
+| GET | `/snapshot/depth` | `image/jpeg` | latest colorized depth preview snapshot |
 | POST | `/query/roi_depth` | JSON | latest metric ROI statistics |
 | POST | `/query/pixel_to_point` | JSON | latest optical-frame point |
 | GET | `/snapshot/pointcloud.bin` | PCD1 v2 binary | primary point-cloud snapshot |

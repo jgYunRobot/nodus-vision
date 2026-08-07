@@ -6,26 +6,38 @@
 #ifndef NODUS_VISION_PROVIDER_HTTP_ENCODED_PREVIEW_CACHE_HPP_
 #define NODUS_VISION_PROVIDER_HTTP_ENCODED_PREVIEW_CACHE_HPP_
 
+#include <chrono>
 #include <cstdint>
 #include <memory>
 #include <mutex>
-#include <vector>
-
 #include <nodus_vision/camera_contracts.hpp>
+#include <vector>
 
 namespace nodus_vision {
 enum class PreviewKind { e_COLOR, e_DEPTH };
-struct EncodedPreview { FrameIdentity identity; std::vector<std::uint8_t> jpeg; };
+struct EncodedPreview {
+    FrameIdentity identity;
+    std::vector<std::uint8_t> jpeg;
+};
 class EncodedPreviewCache {
-public:
+   public:
     bool publishPreview(PreviewKind kind, std::shared_ptr<const EncodedPreview> preview);
     std::shared_ptr<const EncodedPreview> acquirePreview(PreviewKind kind) const;
+    std::shared_ptr<const EncodedPreview> acquireFreshPreview(
+        PreviewKind kind, std::chrono::milliseconds max_age) const;
     void invalidateGeneration(std::uint64_t capture_generation);
-private:
-    mutable std::mutex m_mutex;
-    std::shared_ptr<const EncodedPreview> m_color_preview;
-    std::shared_ptr<const EncodedPreview> m_depth_preview;
-};
-} // namespace nodus_vision
+    void clear();
 
-#endif // NODUS_VISION_PROVIDER_HTTP_ENCODED_PREVIEW_CACHE_HPP_
+   private:
+    struct PreviewSlot {
+        std::shared_ptr<const EncodedPreview> preview;
+        std::chrono::steady_clock::time_point published_at{};
+    };
+
+    mutable std::mutex m_mutex;
+    PreviewSlot m_color_preview;
+    PreviewSlot m_depth_preview;
+};
+}  // namespace nodus_vision
+
+#endif  // NODUS_VISION_PROVIDER_HTTP_ENCODED_PREVIEW_CACHE_HPP_

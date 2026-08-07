@@ -1,15 +1,150 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.nodus.local/vision/v1/config.schema.json",
   "title": "Nodus Vision provider configuration",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "device_id", "component_id", "device", "calibration", "provider"],
+  "required": [
+    "schema_version",
+    "device_id",
+    "component_id",
+    "device",
+    "calibration",
+    "provider"
+  ],
   "properties": {
     "schema_version": {"const": 1},
-    "device_id": {"type": "string", "minLength": 1, "maxLength": 128},
-    "component_id": {"type": "string", "minLength": 1, "maxLength": 128},
-    "device": {"type": "object", "additionalProperties": false},
-    "calibration": {"type": "object", "additionalProperties": false},
-    "provider": {"type": "object", "additionalProperties": false}
+    "device_id": {"$ref": "#/$defs/bounded_string"},
+    "component_id": {"$ref": "#/$defs/bounded_string"},
+    "device": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["adapter"],
+      "properties": {
+        "adapter": {"enum": ["fake", "intel_d435"]},
+        "fake": {"$ref": "#/$defs/fake_device"},
+        "intel_d435": {"$ref": "#/$defs/intel_d435_device"}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"adapter": {"const": "fake"}}},
+          "then": {
+            "required": ["fake"],
+            "properties": {"intel_d435": false}
+          }
+        },
+        {
+          "if": {"properties": {"adapter": {"const": "intel_d435"}}},
+          "then": {
+            "required": ["intel_d435"],
+            "properties": {"fake": false}
+          }
+        }
+      ]
+    },
+    "calibration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "calibration_id",
+        "sensor_frame",
+        "mount_frame",
+        "camera_to_mount_matrix4x4"
+      ],
+      "properties": {
+        "calibration_id": {"$ref": "#/$defs/bounded_string"},
+        "sensor_frame": {"$ref": "#/$defs/bounded_string"},
+        "mount_frame": {"$ref": "#/$defs/bounded_string"},
+        "camera_to_mount_matrix4x4": {
+          "type": "array",
+          "minItems": 16,
+          "maxItems": 16,
+          "items": {"type": "number"}
+        }
+      }
+    },
+    "provider": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "bind_host",
+        "port",
+        "advertised_base_url",
+        "max_connections",
+        "max_stream_clients",
+        "request_timeout_ms",
+        "max_header_bytes",
+        "max_body_bytes",
+        "max_frame_age_ms"
+      ],
+      "properties": {
+        "bind_host": {"$ref": "#/$defs/bounded_string"},
+        "port": {"type": "integer", "minimum": 1, "maximum": 65535},
+        "advertised_base_url": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^http://(?!(?:0\\.0\\.0\\.0|\\*)[:/])[^\\u0000-\\u001F\\u007F]+$"
+        },
+        "max_connections": {"type": "integer", "minimum": 1, "maximum": 1024},
+        "max_stream_clients": {"type": "integer", "minimum": 1, "maximum": 1024},
+        "request_timeout_ms": {"type": "integer", "minimum": 1, "maximum": 60000},
+        "max_header_bytes": {"type": "integer", "minimum": 1, "maximum": 1048576},
+        "max_body_bytes": {"type": "integer", "minimum": 1, "maximum": 10485760},
+        "max_frame_age_ms": {"type": "integer", "minimum": 1, "maximum": 60000}
+      }
+    }
+  },
+  "$defs": {
+    "bounded_string": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[^\\u0000-\\u001F\\u007F]+$"
+    },
+    "fake_device": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["width", "height", "fps", "start_frame_number", "pattern_seed"],
+      "properties": {
+        "width": {"type": "integer", "minimum": 1, "maximum": 4096},
+        "height": {"type": "integer", "minimum": 1, "maximum": 4096},
+        "fps": {"type": "integer", "minimum": 1, "maximum": 240},
+        "start_frame_number": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000000000
+        },
+        "pattern_seed": {"type": "integer", "minimum": 0, "maximum": 255}
+      }
+    },
+    "intel_d435_device": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "serial_number",
+        "depth_width",
+        "depth_height",
+        "depth_fps",
+        "color_width",
+        "color_height",
+        "color_fps",
+        "enable_color",
+        "depth_min_m",
+        "depth_max_m"
+      ],
+      "properties": {
+        "serial_number": {"$ref": "#/$defs/bounded_string"},
+        "depth_width": {"type": "integer", "minimum": 1, "maximum": 4096},
+        "depth_height": {"type": "integer", "minimum": 1, "maximum": 4096},
+        "depth_fps": {"type": "integer", "minimum": 1, "maximum": 240},
+        "color_width": {"type": "integer", "minimum": 1, "maximum": 4096},
+        "color_height": {"type": "integer", "minimum": 1, "maximum": 4096},
+        "color_fps": {"type": "integer", "minimum": 1, "maximum": 240},
+        "enable_color": {"type": "boolean"},
+        "depth_min_m": {"type": "number", "minimum": 0},
+        "depth_max_m": {"type": "number", "exclusiveMinimum": 0}
+      }
+    }
   }
 }

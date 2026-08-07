@@ -6,9 +6,8 @@
 #ifndef NODUS_VISION_PROVIDER_HEALTH_HPP_
 #define NODUS_VISION_PROVIDER_HEALTH_HPP_
 
-#include <string>
-
 #include <nodus_vision/camera_contracts.hpp>
+#include <string>
 
 namespace nodus_vision {
 
@@ -21,6 +20,8 @@ struct ProviderHealthSnapshot {
     bool listening{false};
     int active_connections{0};
     int max_connections{0};
+    int active_stream_clients{0};
+    int max_stream_clients{0};
     CameraHealthSnapshot camera;
     std::string last_error;
 };
@@ -28,6 +29,6 @@ struct ProviderHealthSnapshot {
 /** @brief provider state의 stable serialization을 반환한다. */
 const char* toString(ProviderState state) noexcept;
 
-} // namespace nodus_vision
+}  // namespace nodus_vision
 
-#endif // NODUS_VISION_PROVIDER_HEALTH_HPP_
+#endif  // NODUS_VISION_PROVIDER_HEALTH_HPP_
