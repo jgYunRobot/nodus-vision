@@ -14,7 +14,8 @@ constexpr const char* VALID_CONFIG = R"json({
   "device": {"adapter": "fake", "fake": {"width": 4, "height": 3, "fps": 30, "start_frame_number": 1, "pattern_seed": 7}},
   "calibration": {"calibration_id": "fake_v1", "sensor_frame": "fake_optical", "mount_frame": "fake_mount", "camera_to_mount_matrix4x4": [1.0,0.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,0.0,1.0]},
   "provider": {"bind_host": "127.0.0.1", "port": 0, "advertised_base_url": "http://127.0.0.1:8900", "max_connections": 4, "max_stream_clients": 2, "request_timeout_ms": 1000, "max_header_bytes": 8192, "max_body_bytes": 4096, "max_frame_age_ms": 1000},
-  "pilot": {"enabled": false, "base_url": "http://127.0.0.1:8765", "clock_domain": "monotonic_same_host", "connect_timeout_ms": 500, "request_timeout_ms": 1000, "max_response_bytes": 65536, "retry_initial_delay_ms": 100, "retry_max_delay_ms": 5000, "shutdown_timeout_ms": 1500}
+  "pilot": {"enabled": false, "base_url": "http://127.0.0.1:8765", "clock_domain": "monotonic_same_host", "connect_timeout_ms": 500, "request_timeout_ms": 1000, "max_response_bytes": 65536, "retry_initial_delay_ms": 100, "retry_max_delay_ms": 5000, "shutdown_timeout_ms": 1500},
+  "recording": {"enabled": false, "root": "/tmp/nodus-vision-test-recordings", "queue_capacity_frames": 120, "max_duration_ms": 600000, "minimum_free_bytes": 1073741824, "finalize_timeout_ms": 10000, "bit_rate_bps": 8000000, "preset": "veryfast", "tune": "zerolatency"}
 })json";
 
 }  // namespace
@@ -27,6 +28,7 @@ TEST(VisionConfig, ParsesStrictFakeProviderConfig) {
     EXPECT_EQ(config.fake.width, 4);
     EXPECT_EQ(config.provider.port, 8900);
     EXPECT_EQ(config.calibration.camera_to_mount_matrix4x4.at(0), 1.0);
+    EXPECT_FALSE(config.recording.enabled);
 }
 
 TEST(VisionConfig, RejectsUnknownAndWildcardAdvertiseFields) {
@@ -79,6 +81,18 @@ TEST(VisionConfig, ParsesEnabledPilotConfiguration) {
     EXPECT_TRUE(config.pilot.enabled);
     EXPECT_EQ(config.pilot.clock_domain, "monotonic_same_host");
     EXPECT_EQ(config.pilot.max_response_bytes, 65536);
+}
+
+TEST(VisionConfig, RequiresSafeExplicitRecordingConfiguration) {
+    std::string enabled_odd_profile = VALID_CONFIG;
+    enabled_odd_profile.replace(enabled_odd_profile.find("\"enabled\": false, \"root\""), 16U,
+                                "\"enabled\": true, \"root\"");
+    EXPECT_THROW(parseVisionConfig(enabled_odd_profile), std::invalid_argument);
+
+    std::string relative_root = VALID_CONFIG;
+    relative_root.replace(relative_root.find("/tmp/nodus-vision-test-recordings"), 33U,
+                          "relative-recordings");
+    EXPECT_THROW(parseVisionConfig(relative_root), std::invalid_argument);
 }
 
 }  // namespace nodus_vision

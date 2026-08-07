@@ -7,6 +7,7 @@
 #define NODUS_VISION_CONFIG_VISION_CONFIG_HPP_
 
 #include <array>
+#include <cstdint>
 #include <string>
 
 #include "fake_camera_adapter.hpp"
@@ -40,6 +41,19 @@ struct PilotConfig {
     int shutdown_timeout_ms{0};
 };
 
+/** @brief Vision-owned RGB recording의 strict runtime bounds다. */
+struct RecordingConfig {
+    bool enabled{false};
+    std::string root;
+    int queue_capacity_frames{0};
+    int max_duration_ms{0};
+    std::uint64_t minimum_free_bytes{0U};
+    int finalize_timeout_ms{0};
+    int bit_rate_bps{0};
+    std::string preset;
+    std::string tune;
+};
+
 /** @brief immutable calibration configuration이다. */
 struct CalibrationConfig {
     std::string calibration_id;
@@ -59,6 +73,7 @@ struct VisionConfig {
     CalibrationConfig calibration;
     ProviderConfig provider;
     PilotConfig pilot;
+    RecordingConfig recording;
 };
 
 /** @brief JSON document를 strict typed VisionConfig로 parse한다. */

@@ -1,6 +1,7 @@
 add_subdirectory(core)
 add_subdirectory(adapters)
 add_subdirectory(config)
+add_subdirectory(recording)
 add_subdirectory(pilot)
 add_subdirectory(provider/http)
 add_subdirectory(runtime)

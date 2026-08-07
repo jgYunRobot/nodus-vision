@@ -11,7 +11,8 @@
     "device",
     "calibration",
     "provider",
-    "pilot"
+    "pilot",
+    "recording"
   ],
   "properties": {
     "schema_version": {"const": 1},
@@ -124,6 +125,22 @@
         "retry_initial_delay_ms": {"type": "integer", "minimum": 1, "maximum": 60000},
         "retry_max_delay_ms": {"type": "integer", "minimum": 1, "maximum": 60000},
         "shutdown_timeout_ms": {"type": "integer", "minimum": 1, "maximum": 60000}
+      }
+    },
+    "recording": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "root", "queue_capacity_frames", "max_duration_ms", "minimum_free_bytes", "finalize_timeout_ms", "bit_rate_bps", "preset", "tune"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "root": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^/[^\\u0000-\\u001F\\u007F]*$"},
+        "queue_capacity_frames": {"type": "integer", "minimum": 1, "maximum": 4096},
+        "max_duration_ms": {"type": "integer", "minimum": 1, "maximum": 3600000},
+        "minimum_free_bytes": {"type": "integer", "minimum": 1, "maximum": 1099511627776},
+        "finalize_timeout_ms": {"type": "integer", "minimum": 1, "maximum": 600000},
+        "bit_rate_bps": {"type": "integer", "minimum": 1, "maximum": 100000000},
+        "preset": {"const": "veryfast"},
+        "tune": {"const": "zerolatency"}
       }
     }
   },

@@ -1,0 +1,11 @@
+add_executable(recording_test_contracts test_recording_contracts.cpp)
+set_target_properties(recording_test_contracts PROPERTIES OUTPUT_NAME test_recording_contracts)
+target_link_libraries(recording_test_contracts PRIVATE nodus_vision_recording GTest::gtest_main)
+target_compile_features(recording_test_contracts PRIVATE cxx_std_17)
+add_test(NAME recording_test_contracts COMMAND recording_test_contracts)
+
+add_executable(recording_test_store test_recording_store.cpp)
+set_target_properties(recording_test_store PROPERTIES OUTPUT_NAME test_recording_store)
+target_link_libraries(recording_test_store PRIVATE nodus_vision_recording GTest::gtest_main)
+target_compile_features(recording_test_store PRIVATE cxx_std_17)
+add_test(NAME recording_test_store COMMAND recording_test_store)

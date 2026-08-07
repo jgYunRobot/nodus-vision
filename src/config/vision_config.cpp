@@ -7,6 +7,7 @@
 
 #include <boost/json.hpp>
 #include <cmath>
+#include <filesystem>
 #include <stdexcept>
 #include <string>
 
@@ -58,6 +59,24 @@ int requireBoundedInt(const boost::json::object& object, const char* key, const 
         throw std::invalid_argument(std::string(path) + ": is outside the allowed range.");
     }
     return static_cast<int>(parsed);
+}
+
+std::uint64_t requireBoundedUint64(const boost::json::object& object, const char* key,
+                                   const char* path, std::uint64_t minimum, std::uint64_t maximum) {
+    const boost::json::value& value = requireField(object, key, path);
+    if (!value.is_int64() && !value.is_uint64()) {
+        throw std::invalid_argument(std::string(path) + ": must be an integer.");
+    }
+    const std::uint64_t parsed =
+        value.is_int64()
+            ? (value.as_int64() < 0
+                   ? throw std::invalid_argument(std::string(path) + ": must be non-negative.")
+                   : static_cast<std::uint64_t>(value.as_int64()))
+            : value.as_uint64();
+    if (parsed < minimum || parsed > maximum) {
+        throw std::invalid_argument(std::string(path) + ": is outside the allowed range.");
+    }
+    return parsed;
 }
 
 void rejectUnknownFields(const boost::json::object& object,
@@ -118,7 +137,7 @@ VisionConfig parseVisionConfig(const std::string& json_text) {
     const boost::json::object& root = value.as_object();
     rejectUnknownFields(root,
                         {"schema_version", "device_id", "component_id", "device", "calibration",
-                         "provider", "pilot"},
+                         "provider", "pilot", "recording"},
                         "/");
     VisionConfig config;
     config.schema_version = requireBoundedInt(root, "schema_version", "/schema_version", 1, 1);
@@ -270,6 +289,48 @@ VisionConfig parseVisionConfig(const std::string& json_text) {
     if (config.pilot.retry_initial_delay_ms > config.pilot.retry_max_delay_ms) {
         throw std::invalid_argument(
             "/pilot/retry_initial_delay_ms: must not exceed /pilot/retry_max_delay_ms.");
+    }
+    const boost::json::object& recording = requireObject(root, "recording", "/recording");
+    rejectUnknownFields(
+        recording,
+        {"enabled", "root", "queue_capacity_frames", "max_duration_ms", "minimum_free_bytes",
+         "finalize_timeout_ms", "bit_rate_bps", "preset", "tune"},
+        "/recording");
+    const boost::json::value& recording_enabled =
+        requireField(recording, "enabled", "/recording/enabled");
+    if (!recording_enabled.is_bool()) {
+        throw std::invalid_argument("/recording/enabled: must be a boolean.");
+    }
+    config.recording.enabled = recording_enabled.as_bool();
+    config.recording.root = requireString(recording, "root", "/recording/root");
+    if (!std::filesystem::path(config.recording.root).is_absolute()) {
+        throw std::invalid_argument("/recording/root: must be an absolute config-owned path.");
+    }
+    config.recording.queue_capacity_frames = requireBoundedInt(
+        recording, "queue_capacity_frames", "/recording/queue_capacity_frames", 1, 4096);
+    config.recording.max_duration_ms =
+        requireBoundedInt(recording, "max_duration_ms", "/recording/max_duration_ms", 1, 3600000);
+    config.recording.minimum_free_bytes = requireBoundedUint64(
+        recording, "minimum_free_bytes", "/recording/minimum_free_bytes", 1U, 1099511627776ULL);
+    config.recording.finalize_timeout_ms = requireBoundedInt(
+        recording, "finalize_timeout_ms", "/recording/finalize_timeout_ms", 1, 600000);
+    config.recording.bit_rate_bps =
+        requireBoundedInt(recording, "bit_rate_bps", "/recording/bit_rate_bps", 1, 100000000);
+    config.recording.preset = requireString(recording, "preset", "/recording/preset");
+    config.recording.tune = requireString(recording, "tune", "/recording/tune");
+    if (config.recording.preset != "veryfast" || config.recording.tune != "zerolatency") {
+        throw std::invalid_argument(
+            "/recording: only the Phase 5 veryfast/zerolatency codec profile is supported.");
+    }
+    const int color_width =
+        config.adapter == "fake" ? config.fake.width : config.intel_d435.color_width;
+    const int color_height =
+        config.adapter == "fake" ? config.fake.height : config.intel_d435.color_height;
+    const bool color_enabled = config.adapter == "fake" || config.intel_d435.enable_color;
+    if (config.recording.enabled &&
+        (!color_enabled || color_width % 2 != 0 || color_height % 2 != 0)) {
+        throw std::invalid_argument(
+            "/recording/enabled: requires an enabled even-dimension RGB color profile.");
     }
     return config;
 }
