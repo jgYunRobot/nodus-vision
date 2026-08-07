@@ -72,6 +72,10 @@ class FakePilotLifecycle {
         return m_requests;
     }
 
+    void setRegistrationUnavailable(bool unavailable) {
+        m_registration_unavailable.store(unavailable);
+    }
+
    private:
     static std::string makeLifecycleAcceptedResponse() {
         return R"json({"status":"accepted","snapshot":{"server_instance_id":"pilot-instance","revision":1,"created_at_ns":1,"readiness":{"api_ready":true,"control_connected":true,"component_registry_ready":true,"active_source_ready":true,"required_observations_ready":true,"command_forwarding_enabled":true,"degraded_reasons":[]},"components":[],"control":{"gateway":null,"robot_state":null,"status":null,"last_delivery":null,"last_external_operation":null}}})json";
@@ -99,9 +103,13 @@ class FakePilotLifecycle {
             http::status status = http::status::ok;
             std::string body = "{}";
             if (target == "/api/v1/components/register") {
-                status = http::status::created;
-                body =
-                    R"json({"session_id":"opaque/session secret","server_instance_id":"pilot-instance","accepted_protocol_version":1,"accepted_schema_versions":[1],"heartbeat_interval_ms":20,"lease_timeout_ms":100,"server_time":0})json";
+                if (m_registration_unavailable.load()) {
+                    status = http::status::service_unavailable;
+                } else {
+                    status = http::status::created;
+                    body =
+                        R"json({"session_id":"opaque/session secret","server_instance_id":"pilot-instance","accepted_protocol_version":1,"accepted_schema_versions":[1],"heartbeat_interval_ms":20,"lease_timeout_ms":100,"server_time":0})json";
+                }
             } else if (target.find("/endpoint-catalog") != std::string::npos) {
                 if (m_catalog_response_mode == CatalogResponseMode::e_RETRY_ONCE &&
                     !m_catalog_retry_sent) {
@@ -151,6 +159,7 @@ class FakePilotLifecycle {
     tcp::acceptor m_acceptor;
     unsigned short m_port{0};
     std::atomic<bool> m_running{true};
+    std::atomic<bool> m_registration_unavailable{false};
     CatalogResponseMode m_catalog_response_mode{CatalogResponseMode::e_ACCEPT};
     bool m_catalog_retry_sent{false};
     mutable std::mutex m_mutex;
@@ -286,6 +295,24 @@ TEST(PilotIntegrationClient, RepeatedStartAndStopOwnsOneWorkerAtATime) {
         client.stopClient();
         EXPECT_EQ(client.getSnapshot().state, PilotIntegrationState::e_STOPPED);
     }
+}
+
+TEST(PilotIntegrationClient, RestartsWithNoPriorSuccessTimestamp) {
+    FakePilotLifecycle server;
+    PilotIntegrationClient client(makeConfig(server.getBaseUrl()),
+                                  []() { return "vision-00112233445566778899aabbccddeeff"; });
+    client.startClient(ProviderState::e_READY);
+    ASSERT_TRUE(waitFor(
+        [&client]() { return client.getSnapshot().state == PilotIntegrationState::e_ONLINE; }));
+    EXPECT_GE(client.getSnapshot().last_success_age_ms, 0);
+    client.stopClient();
+
+    server.setRegistrationUnavailable(true);
+    client.startClient(ProviderState::e_READY);
+    ASSERT_TRUE(waitFor(
+        [&client]() { return client.getSnapshot().state == PilotIntegrationState::e_RECOVERING; }));
+    EXPECT_EQ(client.getSnapshot().last_success_age_ms, -1);
+    client.stopClient();
 }
 
 TEST(PilotIntegrationClient, BoundsFreshRegistrationAfterRecoverableCatalogFailures) {

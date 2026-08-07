@@ -1,5 +1,32 @@
 # Progress
 
+## 2026-08-08 - Phase 4 R4 remediation acceptance
+
+### Changes
+
+- Closed the R4-A through R4-D findings: health/OpenAPI parity, atomic worker shutdown, bounded
+  replacement recovery, explicit latest-state ownership, accepted-response identity validation, and
+  success-age reset/bounds.
+- Added the failure matrix for persistent recoverable catalog loss, malformed accepted responses,
+  unknown and permanent conflicts, failed degraded-state publication, lifecycle identity mismatch,
+  absent Pilot, and stop/start reset.
+
+### Status
+
+- The Phase 4 R4 gate is closed. FFmpeg provenance investigation may now begin in the separately
+  designed Phase 5 P5-0 checkpoint.
+- Recording implementation, FFmpeg build linkage, provider recording routes, filesystem artifacts,
+  Pilot recording descriptors, and all later phases remain unimplemented.
+
+### Validation
+
+- `cmake --build --preset debug` and complete `ctest --test-dir build/debug --output-on-failure`
+  passed (18/18).
+- `pilot_test_integration_client` and `integration_test_application_lifecycle` each passed 25
+  consecutive runs (50 repeated loopback recovery/shutdown executions total).
+- `clang-format-18` (host version 18.1.3) formatted changed C++ files and `git diff --check`
+  passed. No physical camera, Pilot process/source, or payload relay was accessed.
+
 ## 2026-08-08 - Phase 4 R4-A health contract parity
 
 ### Changes
