@@ -38,6 +38,8 @@ TEST(ProviderHttpServer, ServesHealthMetadataAndNoStoreResponses)
         []() { return ProviderHttpResponse{503, "application/json", "{}"}; },
         []() { return ProviderHttpResponse{503, "application/json", "{}"}; },
         []() { return ProviderHttpResponse{503, "application/json", "{}"}; },
+        [](const std::string&) { return ProviderHttpResponse{400, "application/json", "{}"}; },
+        [](const std::string&) { return ProviderHttpResponse{400, "application/json", "{}"}; },
     });
     server.startServer();
     const http::response<http::string_body> health = getResponse(server.getBoundPort(), "/health");

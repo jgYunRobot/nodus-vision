@@ -13,6 +13,8 @@
 #include <thread>
 #include <utility>
 
+#include <boost/json.hpp>
+
 #include <nodus_vision/camera_adapter.hpp>
 #include <nodus_vision/frame_store.hpp>
 
@@ -22,6 +24,7 @@
 #include "encoded_preview_cache.hpp"
 #include "jpeg_encoder.hpp"
 #include "pcd1.hpp"
+#include "query_serializer.hpp"
 
 namespace nodus_vision {
 namespace {
@@ -93,6 +96,32 @@ void VisionApplication::startApplication()
             const PointCloudSnapshot cloud = frame->buildPointCloudSnapshot(100000U, 1);
             const std::vector<std::uint8_t> bytes = writePcd1V2(cloud);
             return ProviderHttpResponse{200, "application/octet-stream", std::string(bytes.begin(), bytes.end()), makeIdentityHeaders(cloud.identity)};
+        },
+        [this](const std::string& body) {
+            try {
+                const boost::json::value parsed = boost::json::parse(body);
+                const boost::json::object& input = parsed.as_object();
+                if (input.size() != 4U) { throw std::invalid_argument("field count"); }
+                const int x = input.at("x").to_number<int>(); const int y = input.at("y").to_number<int>();
+                const int width = input.at("width").to_number<int>(); const int height = input.at("height").to_number<int>();
+                if (width <= 0 || height <= 0) { throw std::invalid_argument("ROI size"); }
+                const std::shared_ptr<const CapturedFrame> frame = m_p_impl->m_frame_store.acquireLatestFrame();
+                if (frame == nullptr) { return ProviderHttpResponse{503, "application/json", "{\"schema_version\":1,\"error\":{\"code\":\"no_fresh_frame\",\"message\":\"No captured frame is available.\",\"retryable\":true}}", {}}; }
+                return ProviderHttpResponse{200, "application/json", serializeRoiDepthResult(frame->queryDepthInRoi(x, y, width, height)), makeIdentityHeaders(frame->getSnapshot().identity)};
+            } catch (const std::exception&) { return ProviderHttpResponse{400, "application/json", "{\"schema_version\":1,\"error\":{\"code\":\"invalid_request\",\"message\":\"ROI request is invalid.\",\"retryable\":false}}", {}}; }
+        },
+        [this](const std::string& body) {
+            try {
+                const boost::json::value parsed = boost::json::parse(body);
+                const boost::json::object& input = parsed.as_object();
+                if (input.size() != 2U) { throw std::invalid_argument("field count"); }
+                const int x = input.at("x").to_number<int>(); const int y = input.at("y").to_number<int>();
+                const std::shared_ptr<const CapturedFrame> frame = m_p_impl->m_frame_store.acquireLatestFrame();
+                if (frame == nullptr) { return ProviderHttpResponse{503, "application/json", "{\"schema_version\":1,\"error\":{\"code\":\"no_fresh_frame\",\"message\":\"No captured frame is available.\",\"retryable\":true}}", {}}; }
+                const std::optional<PixelPointResult> result = frame->queryPixelPoint(x, y);
+                if (!result.has_value()) { return ProviderHttpResponse{503, "application/json", "{\"schema_version\":1,\"error\":{\"code\":\"no_fresh_frame\",\"message\":\"No captured frame is available.\",\"retryable\":true}}", {}}; }
+                return ProviderHttpResponse{200, "application/json", serializePixelPointResult(*result), makeIdentityHeaders(result->identity)};
+            } catch (const std::exception&) { return ProviderHttpResponse{400, "application/json", "{\"schema_version\":1,\"error\":{\"code\":\"invalid_request\",\"message\":\"Pixel request is invalid.\",\"retryable\":false}}", {}}; }
         },
     });
     m_p_impl->m_p_server->startServer();

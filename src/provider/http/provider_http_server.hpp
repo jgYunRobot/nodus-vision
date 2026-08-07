@@ -29,6 +29,8 @@ struct ProviderHttpRoutes {
     std::function<ProviderHttpResponse()> get_color_snapshot;
     std::function<ProviderHttpResponse()> get_depth_snapshot;
     std::function<ProviderHttpResponse()> get_pointcloud_snapshot;
+    std::function<ProviderHttpResponse(const std::string&)> post_roi_depth;
+    std::function<ProviderHttpResponse(const std::string&)> post_pixel_point;
 };
 
 /** @brief asynchronous bounded HTTP listener다. */

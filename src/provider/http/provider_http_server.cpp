@@ -55,7 +55,13 @@ private:
         response.set(http::field::content_type, "application/json");
         response.set(http::field::cache_control, "no-store");
         response.keep_alive(false);
-        if (request.method() != http::verb::get) {
+        if (request.method() == http::verb::post && request.target() == "/query/roi_depth") {
+            const ProviderHttpResponse payload = m_routes.post_roi_depth(request.body());
+            response.result(static_cast<http::status>(payload.status)); response.body() = payload.body;
+        } else if (request.method() == http::verb::post && request.target() == "/query/pixel_to_point") {
+            const ProviderHttpResponse payload = m_routes.post_pixel_point(request.body());
+            response.result(static_cast<http::status>(payload.status)); response.body() = payload.body;
+        } else if (request.method() != http::verb::get) {
             response.result(http::status::method_not_allowed);
             response.body() = "{\"schema_version\":1,\"error\":{\"code\":\"method_not_allowed\",\"message\":\"Method is not allowed.\",\"retryable\":false}}";
         } else if (request.target() == "/health") {

@@ -1,5 +1,25 @@
 # Progress
 
+## 2026-08-08 - Phase 3 direct ROI and pixel query checkpoint
+
+### Changes
+
+- Added bounded POST route callbacks for `/query/roi_depth` and `/query/pixel_to_point`.
+- Enforced strict expected-field count, typed numeric extraction, invalid-request 400 responses, and
+  no-frame 503 responses before querying one immutable `FrameStore` owner.
+- Added query result JSON serialization with frame identity headers so response bodies and headers
+  refer to the same captured frame.
+
+### Status
+
+- Direct query endpoint implementation is in place. MJPEG streaming lifecycle and slow-client
+  backpressure remain before the overall Phase 3 completion gate.
+
+### Validation
+
+- `cmake --build --preset debug` and `ctest --test-dir build/debug --output-on-failure` passed
+  11/11 hardware-independent tests. No camera hardware or external component was accessed.
+
 ## 2026-08-08 - Phase 3 direct depth snapshot checkpoint
 
 ### Changes

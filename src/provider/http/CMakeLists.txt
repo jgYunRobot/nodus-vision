@@ -25,7 +25,7 @@ set_target_properties(
 )
 add_dependencies(nodus_vision_libjpeg_turbo nodus_vision_libjpeg_turbo_project)
 
-add_library(nodus_vision_provider_http STATIC provider_http_server.cpp jpeg_encoder.cpp encoded_preview_cache.cpp pcd1.cpp)
+add_library(nodus_vision_provider_http STATIC provider_http_server.cpp jpeg_encoder.cpp encoded_preview_cache.cpp pcd1.cpp query_serializer.cpp)
 target_include_directories(nodus_vision_provider_http PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(
     nodus_vision_provider_http
