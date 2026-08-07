@@ -97,6 +97,19 @@ VisionEndpointCatalog VisionEndpointCatalogBuilder::buildCatalog(const VisionCon
                                                  "/snapshot/color", "image/jpeg",
                                                  "nodus.vision.jpeg.color.v1", "GET", ""));
     }
+    if (config.recording.enabled) {
+        result.descriptors.push_back(
+            makeService(config, "recording-start", "camera.recording.start", "/recordings/start",
+                        "application/json", "nodus.vision.recording.start.response.v1", "POST",
+                        "nodus.vision.recording.start.request.v1"));
+        result.descriptors.push_back(makeService(config, "recording-stop", "camera.recording.stop",
+                                                 "/recordings/stop", "application/json",
+                                                 "nodus.vision.recording.stop.response.v1", "POST",
+                                                 "nodus.vision.recording.stop.request.v1"));
+        result.descriptors.push_back(makeService(
+            config, "recording-current", "camera.recording.current", "/recordings/current",
+            "application/json", "nodus.vision.recording.current.response.v1", "GET", ""));
+    }
     std::sort(result.descriptors.begin(), result.descriptors.end(),
               [](const PilotEndpointDescriptor& lhs, const PilotEndpointDescriptor& rhs) {
                   return lhs.descriptor_id < rhs.descriptor_id;

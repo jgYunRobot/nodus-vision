@@ -59,4 +59,15 @@ TEST(VisionEndpointCatalog, OmitsOnlyColorDescriptorsWhenColorIsDisabled) {
     }
 }
 
+TEST(VisionEndpointCatalog, AddsOnlyDirectRecordingServicesWhenEnabled) {
+    VisionConfig config = makeConfig();
+    config.recording.enabled = true;
+    const VisionEndpointCatalog catalog = VisionEndpointCatalogBuilder().buildCatalog(config);
+    ASSERT_EQ(catalog.descriptors.size(), 12U);
+    EXPECT_EQ(catalog.descriptors.at(8).descriptor_id, "recording-current");
+    EXPECT_EQ(catalog.descriptors.at(9).descriptor_id, "recording-start");
+    EXPECT_EQ(catalog.descriptors.at(10).descriptor_id, "recording-stop");
+    EXPECT_EQ(catalog.descriptors.at(8).endpoint, "http://127.0.0.1:8900/recordings/current");
+}
+
 }  // namespace nodus_vision

@@ -1,5 +1,21 @@
 # Progress
 
+## 2026-08-08 - Phase 5 P5-6 recording catalog gate
+
+### Changes
+
+- Added enabled-only, stable-sorted Pilot discovery descriptors for direct Vision recording start,
+  stop, and current HTTP endpoints.
+
+### Status
+
+- P5-6 is complete. Pilot remains discovery-only; recording request bodies and artifact bytes are
+  never relayed through Pilot. P5-7 acceptance remains.
+
+### Validation
+
+- `pilot_test_vision_endpoint_catalog` passed with the 12-descriptor recording-enabled catalog.
+
 ## 2026-08-08 - Phase 5 P5-5 immutable artifact finalize gate
 
 ### Changes
