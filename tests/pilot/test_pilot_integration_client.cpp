@@ -27,7 +27,8 @@ using tcp = asio::ip::tcp;
 
 class FakePilotLifecycle {
    public:
-    FakePilotLifecycle() : m_acceptor(m_io_context) {
+    explicit FakePilotLifecycle(bool retry_catalog_once = false)
+        : m_retry_catalog_once(retry_catalog_once), m_acceptor(m_io_context) {
         m_acceptor.open(tcp::v4());
         m_acceptor.set_option(asio::socket_base::reuse_address(true));
         m_acceptor.bind({asio::ip::address_v4::loopback(), 0});
@@ -75,13 +76,22 @@ class FakePilotLifecycle {
                 m_requests.emplace_back(std::string(request.target()), request.body());
             }
             const std::string target(request.target());
-            const std::string body =
-                target == "/api/v1/components/register"
-                    ? R"json({"session_id":"opaque/session secret","server_instance_id":"pilot-instance","accepted_protocol_version":1,"accepted_schema_versions":[1],"heartbeat_interval_ms":20,"lease_timeout_ms":100,"server_time":0})json"
-                    : "{}";
-            http::response<http::string_body> response(
-                target == "/api/v1/components/register" ? http::status::created : http::status::ok,
-                request.version());
+            http::status status = http::status::ok;
+            std::string body = "{}";
+            if (target == "/api/v1/components/register") {
+                status = http::status::created;
+                body =
+                    R"json({"session_id":"opaque/session secret","server_instance_id":"pilot-instance","accepted_protocol_version":1,"accepted_schema_versions":[1],"heartbeat_interval_ms":20,"lease_timeout_ms":100,"server_time":0})json";
+            } else if (target.find("/endpoint-catalog") != std::string::npos) {
+                if (m_retry_catalog_once && !m_catalog_retry_sent) {
+                    m_catalog_retry_sent = true;
+                    status = http::status::service_unavailable;
+                } else {
+                    body =
+                        R"json({"status":"accepted","server_instance_id":"pilot-instance","component_id":"camera.fake","session_generation":1,"catalog_generation":1,"catalog_revision":1,"descriptor_count":9})json";
+                }
+            }
+            http::response<http::string_body> response(status, request.version());
             response.set(http::field::content_type, "application/json");
             response.keep_alive(false);
             response.body() = body;
@@ -93,6 +103,8 @@ class FakePilotLifecycle {
     asio::io_context m_io_context;
     tcp::acceptor m_acceptor;
     unsigned short m_port{0};
+    bool m_retry_catalog_once{false};
+    bool m_catalog_retry_sent{false};
     mutable std::mutex m_mutex;
     std::vector<std::pair<std::string, std::string>> m_requests;
     std::thread m_worker;
@@ -131,6 +143,8 @@ TEST(PilotIntegrationClient, UsesOneSequenceForStateHeartbeatAndBoundedDisconnec
     client.startClient(ProviderState::e_READY);
     ASSERT_TRUE(waitFor(
         [&client]() { return client.getSnapshot().state == PilotIntegrationState::e_ONLINE; }));
+    EXPECT_EQ(client.getSnapshot().catalog_generation, 1U);
+    EXPECT_EQ(client.getSnapshot().descriptor_count, 9);
     client.updateProviderState(ProviderState::e_DEGRADED);
     ASSERT_TRUE(waitFor([&server]() { return server.getRequests().size() >= 2U; }));
     client.stopClient();
@@ -162,6 +176,27 @@ TEST(PilotIntegrationClient, DisabledClientMakesNoNetworkRequest) {
     client.startClient(ProviderState::e_READY);
     EXPECT_EQ(client.getSnapshot().state, PilotIntegrationState::e_DISABLED);
     client.stopClient();
+}
+
+TEST(PilotIntegrationClient, RetriesSameCatalogPublicationWithoutPayloadRelay) {
+    FakePilotLifecycle server(true);
+    PilotIntegrationClient client(makeConfig(server.getBaseUrl()),
+                                  []() { return "vision-00112233445566778899aabbccddeeff"; });
+    client.startClient(ProviderState::e_READY);
+    ASSERT_TRUE(waitFor(
+        [&client]() { return client.getSnapshot().state == PilotIntegrationState::e_ONLINE; }));
+    client.stopClient();
+    const std::vector<std::pair<std::string, std::string>> requests = server.getRequests();
+    std::vector<std::string> publications;
+    for (const auto& request : requests) {
+        if (request.first.find("/endpoint-catalog") != std::string::npos) {
+            publications.push_back(request.second);
+        }
+    }
+    ASSERT_EQ(publications.size(), 2U);
+    EXPECT_EQ(publications.at(0), publications.at(1));
+    EXPECT_EQ(
+        boost::json::parse(publications.at(0)).as_object().at("descriptors").as_array().size(), 9U);
 }
 
 TEST(PilotIntegrationClient, MissingPilotLeavesRecoveringSnapshotAndStops) {

@@ -252,6 +252,35 @@ PilotRegistrationResponse parseRegistrationResponse(const std::string& response_
     return response;
 }
 
+PilotCatalogAcceptedResponse parseCatalogAcceptedResponse(const std::string& response_body,
+                                                          const std::string& component_id,
+                                                          int descriptor_count) {
+    boost::json::error_code error;
+    const boost::json::value value = boost::json::parse(response_body, error);
+    if (error || !value.is_object()) {
+        throw std::invalid_argument("Pilot catalog response must be a JSON object.");
+    }
+    const boost::json::object& object = value.as_object();
+    if (object.size() != 7U || !object.if_contains("status") || object.at("status") != "accepted") {
+        throw std::invalid_argument("Pilot catalog response is invalid.");
+    }
+    PilotCatalogAcceptedResponse response;
+    response.server_instance_id = requireIdentifier(object, "server_instance_id");
+    response.component_id = requireIdentifier(object, "component_id");
+    response.catalog_generation = requireNonNegativeInteger(object, "catalog_generation");
+    const std::uint64_t parsed_count = requireNonNegativeInteger(object, "descriptor_count");
+    const std::uint64_t session_generation =
+        requireNonNegativeInteger(object, "session_generation");
+    const std::uint64_t catalog_revision = requireNonNegativeInteger(object, "catalog_revision");
+    if (response.component_id != component_id || response.catalog_generation == 0U ||
+        session_generation == 0U || catalog_revision == 0U ||
+        parsed_count != static_cast<std::uint64_t>(descriptor_count)) {
+        throw std::invalid_argument("Pilot catalog response does not match the publication.");
+    }
+    response.descriptor_count = descriptor_count;
+    return response;
+}
+
 std::string serializeHeartbeatRequest(std::uint64_t sequence) {
     if (sequence > MAX_INT64_VALUE) {
         throw std::invalid_argument("Heartbeat sequence exceeds the public range.");

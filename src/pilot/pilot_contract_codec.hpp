@@ -69,6 +69,14 @@ struct PilotRegistrationResponse {
     std::uint64_t server_time_ns{0U};
 };
 
+/** @brief strict validated endpoint catalog accepted response DTO다. */
+struct PilotCatalogAcceptedResponse {
+    std::string server_instance_id;
+    std::string component_id;
+    std::uint64_t catalog_generation{0U};
+    int descriptor_count{0};
+};
+
 /** @brief deterministic production/test instance ID generator seam이다. */
 using InstanceIdGenerator = std::function<std::string()>;
 
@@ -82,6 +90,10 @@ std::string serializeCatalogPublicationRequest(
     const std::vector<PilotEndpointDescriptor>& descriptors);
 /** @brief strict public registration response를 parse하고 validate한다. */
 PilotRegistrationResponse parseRegistrationResponse(const std::string& response_body);
+/** @brief strict public catalog accepted response를 parse하고 validate한다. */
+PilotCatalogAcceptedResponse parseCatalogAcceptedResponse(const std::string& response_body,
+                                                          const std::string& component_id,
+                                                          int descriptor_count);
 /** @brief heartbeat request를 serialize한다. */
 std::string serializeHeartbeatRequest(std::uint64_t sequence);
 /** @brief coarse state update request를 serialize한다. */

@@ -59,4 +59,17 @@ TEST(PilotContractCodec, UsesValidatedInstanceIdentitySeam) {
     EXPECT_THROW(generateInstanceId([]() { return "not-an-instance"; }), std::invalid_argument);
 }
 
+TEST(PilotContractCodec, ValidatesCatalogAcceptanceAgainstPublication) {
+    const std::string accepted =
+        R"json({"status":"accepted","server_instance_id":"pilot-instance","component_id":"camera.fake","session_generation":1,"catalog_generation":1,"catalog_revision":1,"descriptor_count":9})json";
+    const PilotCatalogAcceptedResponse response =
+        parseCatalogAcceptedResponse(accepted, "camera.fake", 9);
+    EXPECT_EQ(response.catalog_generation, 1U);
+    EXPECT_THROW(
+        parseCatalogAcceptedResponse(
+            R"json({"status":"accepted","server_instance_id":"pilot-instance","component_id":"camera.fake","session_generation":0,"catalog_generation":1,"catalog_revision":1,"descriptor_count":9})json",
+            "camera.fake", 9),
+        std::invalid_argument);
+}
+
 }  // namespace nodus_vision

@@ -1,5 +1,39 @@
 # Progress
 
+## 2026-08-08 - Phase 4 P4-4 endpoint catalog publication
+
+### Changes
+
+- Added registration-gated full replacement catalog publication. Each new session begins with
+  expected generation `0`, a session-local deterministic publication ID, and the stable direct
+  Vision descriptor set.
+- Added strict accepted-response validation for component identity, positive catalog/session
+  generations, revision, and exact descriptor count. Redacted health now exposes only the accepted
+  catalog generation/count.
+- Catalog transport failure or 503 retries the exact same immutable publication JSON and ID;
+  stale catalog generation discards the session for fresh registration, while idempotency conflict
+  and configuration errors become explicit contract faults without mutating the payload.
+- Extended fake-Pilot tests to observe only lifecycle/catalog metadata and verify two byte-equal
+  catalog retries, descriptor count, and catalog snapshot projection.
+
+### Status
+
+- P4-4 is complete. Pilot is still not composed into `VisionApplication`; absent/start-later/
+  restart recovery and provider continuity remain P4-5 responsibilities.
+
+### Validation
+
+- `clang-format-18` formatted changed C++ files.
+- `cmake --build --preset debug` and `ctest --test-dir build/debug --output-on-failure` passed
+  17/17 with local fake Pilot and fake camera only.
+- No Pilot source/process, camera payload relay, physical camera, recording, or geometry work was
+  used.
+
+### Next goals
+
+- Implement P4-5 `VisionApplication` composition and fake-Pilot recovery/restart acceptance while
+  preserving direct provider continuity.
+
 ## 2026-08-08 - Phase 4 P4-3 component lifecycle client
 
 ### Changes
