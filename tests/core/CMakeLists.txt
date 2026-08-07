@@ -1,0 +1,5 @@
+add_executable(core_test_frame_store test_frame_store.cpp)
+set_target_properties(core_test_frame_store PROPERTIES OUTPUT_NAME test_frame_store)
+target_link_libraries(core_test_frame_store PRIVATE nodus_vision_core GTest::gtest_main)
+target_compile_features(core_test_frame_store PRIVATE cxx_std_17)
+add_test(NAME core_test_frame_store COMMAND core_test_frame_store)

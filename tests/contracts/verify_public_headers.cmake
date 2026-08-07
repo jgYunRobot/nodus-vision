@@ -1,0 +1,8 @@
+file(GLOB public_headers "${HEADER_ROOT}/*.hpp")
+foreach(public_header IN LISTS public_headers)
+    file(READ "${public_header}" header_contents)
+    string(REGEX MATCH "rs2|librealsense|IntelD435" prohibited_identifier "${header_contents}")
+    if(prohibited_identifier)
+        message(FATAL_ERROR "Public header exposes prohibited vendor identifier: ${public_header}")
+    endif()
+endforeach()

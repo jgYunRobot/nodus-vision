@@ -9,4 +9,11 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 include(GNUInstallDirs)
 include(CTest)
 
-# Runtime and library targets are intentionally deferred to the approved migration checkpoints.
+option(NODUS_VISION_BUILD_TESTING "Build nodus-vision tests." ${BUILD_TESTING})
+
+add_subdirectory(src)
+
+if(NODUS_VISION_BUILD_TESTING)
+    add_subdirectory(libs/googletest EXCLUDE_FROM_ALL)
+    add_subdirectory(tests)
+endif()

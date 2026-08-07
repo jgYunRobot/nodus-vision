@@ -1,0 +1,11 @@
+add_executable(adapter_test_fake_camera test_fake_camera.cpp)
+set_target_properties(adapter_test_fake_camera PROPERTIES OUTPUT_NAME test_fake_camera)
+target_link_libraries(adapter_test_fake_camera PRIVATE nodus_vision_fake_adapter GTest::gtest_main)
+target_compile_features(adapter_test_fake_camera PRIVATE cxx_std_17)
+add_test(NAME adapter_test_fake_camera COMMAND adapter_test_fake_camera)
+
+add_executable(adapter_test_intel_d435 test_intel_d435.cpp)
+set_target_properties(adapter_test_intel_d435 PROPERTIES OUTPUT_NAME test_intel_d435)
+target_link_libraries(adapter_test_intel_d435 PRIVATE nodus_vision_intel_d435 GTest::gtest_main)
+target_compile_features(adapter_test_intel_d435 PRIVATE cxx_std_17)
+add_test(NAME adapter_test_intel_d435 COMMAND adapter_test_intel_d435)

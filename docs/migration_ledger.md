@@ -36,3 +36,14 @@ not during this design-only foundation.
   incidental third-party include path.
 
 No native dependency source was copied or added by the foundation task.
+
+## Phase 1 native dependencies
+
+| Dependency | Source | Exact revision/version | License | Consuming target |
+|---|---|---|---|---|
+| librealsense | `https://github.com/realsenseai/librealsense.git` | `05e3d1e57f3c87e6c9768eaca9e89639966beee2` | Apache-2.0 | `nodus_vision_intel_d435` |
+| nlohmann/json | `https://github.com/nlohmann/json.git` | `65ee68451d8eb2b5f3a30b410476ab83deb3289b` (`v3.12.0`) | MIT | librealsense configuration dependency |
+| GoogleTest | `https://github.com/google/googletest.git` | `e39786088138f2749d64e9e90e0f9902daa77c40` (`v1.15.0`) | BSD-3-Clause | hardware-independent C++ tests |
+
+The pinned librealsense revision configures its declared `v3.12.0` nlohmann/json dependency during
+CMake configure. It is a build-tree dependency only; Nodus Vision does not import PA-CONTROL's copy.

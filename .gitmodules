@@ -1,3 +1,9 @@
 [submodule "docs/agent_docs"]
 	path = docs/agent_docs
 	url = https://github.com/jgYunRobot/agent_docs
+[submodule "libs/librealsense"]
+	path = libs/librealsense
+	url = https://github.com/realsenseai/librealsense.git
+[submodule "libs/googletest"]
+	path = libs/googletest
+	url = https://github.com/google/googletest.git

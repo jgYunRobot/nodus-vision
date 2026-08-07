@@ -1,5 +1,43 @@
 # Progress
 
+## 2026-08-07 - Phase 1 camera-neutral core and adapters
+
+### Changes
+
+- Added vendor-neutral public frame, camera adapter, bounded enum serialization, health, query, and
+  point-cloud contracts with Korean Doxygen and include guards.
+- Added the immutable latest-only `FrameStore`; duplicate and regressing frame identities do not
+  replace the current owner, and readers retain a valid frame owner after replacement.
+- Added a deterministic caller-driven fake RGBD adapter with reproducible identity, RGB/depth
+  pattern, depth ROI/deprojection, and bounded point cloud behavior.
+- Added a private Intel D435 adapter target that owns librealsense lifecycle and frame objects while
+  keeping all SDK types out of installed public headers. Device selection fails closed unless it
+  resolves exactly one device.
+- Pinned Vision-owned librealsense and GoogleTest submodules and recorded their exact revisions and
+  licenses, including librealsense's exact JSON configuration dependency.
+
+### Status
+
+- Phase 1 is complete with fake-adapter acceptance and no physical camera execution.
+- The D435 target is compile/link validated only. It has not opened a device, captured a frame, or
+  claimed hardware acceptance.
+
+### Validation
+
+- `cmake --preset debug` and `cmake --build --preset debug` passed with the pinned dependencies.
+- `ctest --test-dir build/debug --output-on-failure` passed 5/5 hardware-independent tests:
+  public contract and vendor identifier scan, latest-frame ordering/lifetime/concurrency, fake RGBD
+  geometry/point cloud/manual advance, and D435 config/construction without device open.
+- `clang-format` 18.1.8 was not available on the host, so formatting command execution is pending
+  host tool installation; CMake's build and static tests were not weakened.
+- No physical camera, `/dev/bus/usb`, Pilot, Control, recording, or PA-CONTROL runtime dependency
+  was accessed.
+
+### Next goals
+
+- Implement Phase 2 strict configuration, ordered degraded lifecycle, and bounded health/metadata
+  server after reviewing this Phase 1 staged diff and commit.
+
 ## 2026-08-07 - Phase 0 foundation and provenance verification
 
 ### Changes
