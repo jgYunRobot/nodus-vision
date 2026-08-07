@@ -37,6 +37,7 @@ TEST(ProviderHttpServer, ServesHealthMetadataAndNoStoreResponses)
         []() { return ProviderHttpResponse{200, "application/json", "{\"schema_version\":1,\"endpoints\":[\"/health\",\"/metadata\"]}"}; },
         []() { return ProviderHttpResponse{503, "application/json", "{}"}; },
         []() { return ProviderHttpResponse{503, "application/json", "{}"}; },
+        []() { return ProviderHttpResponse{503, "application/json", "{}"}; },
     });
     server.startServer();
     const http::response<http::string_body> health = getResponse(server.getBoundPort(), "/health");

@@ -1,5 +1,23 @@
 # Progress
 
+## 2026-08-08 - Phase 3 direct depth snapshot checkpoint
+
+### Changes
+
+- Added `GET /snapshot/depth` as a direct Vision-owned JPEG endpoint backed by the depth latest-only
+  cache, with no-frame 503 semantics and complete capture identity headers.
+- Added the active depth snapshot endpoint to runtime metadata.
+
+### Status
+
+- Color/depth JPEG and binary point-cloud snapshots are now direct provider routes. MJPEG, strict
+  query POST routes, and slow-client backpressure remain in-progress Phase 3 responsibilities.
+
+### Validation
+
+- `cmake --build --preset debug` and `ctest --test-dir build/debug --output-on-failure` passed
+  11/11 hardware-independent tests. No physical camera access occurred.
+
 ## 2026-08-08 - Phase 3 deterministic depth preview checkpoint
 
 ### Changes

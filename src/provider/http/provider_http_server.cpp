@@ -76,6 +76,12 @@ private:
             response.set(http::field::content_type, payload.content_type);
             response.body() = payload.body;
             for (const auto& header : payload.headers) { response.set(header.first, header.second); }
+        } else if (request.target() == "/snapshot/depth") {
+            const ProviderHttpResponse payload = m_routes.get_depth_snapshot();
+            response.result(static_cast<http::status>(payload.status));
+            response.set(http::field::content_type, payload.content_type);
+            response.body() = payload.body;
+            for (const auto& header : payload.headers) { response.set(header.first, header.second); }
         } else if (request.target() == "/snapshot/pointcloud.bin") {
             const ProviderHttpResponse payload = m_routes.get_pointcloud_snapshot();
             response.result(static_cast<http::status>(payload.status));

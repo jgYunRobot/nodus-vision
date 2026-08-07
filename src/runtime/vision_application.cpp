@@ -76,9 +76,14 @@ void VisionApplication::startApplication()
     m_p_impl->m_health.max_connections = m_p_impl->m_config.provider.max_connections;
     m_p_impl->m_p_server = std::make_unique<ProviderHttpServer>(m_p_impl->m_config.provider.bind_host, m_p_impl->m_config.provider.port, m_p_impl->m_config.provider.max_connections, m_p_impl->m_config.provider.request_timeout_ms, m_p_impl->m_config.provider.max_header_bytes, m_p_impl->m_config.provider.max_body_bytes, ProviderHttpRoutes{
         [this]() { return ProviderHttpResponse{200, "application/json", makeHealthJson(getHealthSnapshot()), {}}; },
-        [this]() { return ProviderHttpResponse{200, "application/json", "{\"schema_version\":1,\"endpoints\":[\"/health\",\"/metadata\",\"/snapshot/color\",\"/snapshot/pointcloud.bin\"],\"advertised_base_url\":\"" + m_p_impl->m_config.provider.advertised_base_url + "\"}", {}}; },
+        [this]() { return ProviderHttpResponse{200, "application/json", "{\"schema_version\":1,\"endpoints\":[\"/health\",\"/metadata\",\"/snapshot/color\",\"/snapshot/depth\",\"/snapshot/pointcloud.bin\"],\"advertised_base_url\":\"" + m_p_impl->m_config.provider.advertised_base_url + "\"}", {}}; },
         [this]() {
             const std::shared_ptr<const EncodedPreview> preview = m_p_impl->m_preview_cache.acquirePreview(PreviewKind::e_COLOR);
+            if (preview == nullptr) { return ProviderHttpResponse{503, "application/json", "{\"schema_version\":1,\"error\":{\"code\":\"no_fresh_frame\",\"message\":\"No captured frame is available.\",\"retryable\":true}}", {}}; }
+            return ProviderHttpResponse{200, "image/jpeg", std::string(preview->jpeg.begin(), preview->jpeg.end()), makeIdentityHeaders(preview->identity)};
+        },
+        [this]() {
+            const std::shared_ptr<const EncodedPreview> preview = m_p_impl->m_preview_cache.acquirePreview(PreviewKind::e_DEPTH);
             if (preview == nullptr) { return ProviderHttpResponse{503, "application/json", "{\"schema_version\":1,\"error\":{\"code\":\"no_fresh_frame\",\"message\":\"No captured frame is available.\",\"retryable\":true}}", {}}; }
             return ProviderHttpResponse{200, "image/jpeg", std::string(preview->jpeg.begin(), preview->jpeg.end()), makeIdentityHeaders(preview->identity)};
         },

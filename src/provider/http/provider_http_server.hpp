@@ -27,6 +27,7 @@ struct ProviderHttpRoutes {
     std::function<ProviderHttpResponse()> get_health;
     std::function<ProviderHttpResponse()> get_metadata;
     std::function<ProviderHttpResponse()> get_color_snapshot;
+    std::function<ProviderHttpResponse()> get_depth_snapshot;
     std::function<ProviderHttpResponse()> get_pointcloud_snapshot;
 };
 
