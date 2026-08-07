@@ -1,0 +1,5 @@
+add_library(nodus_vision_provider_http STATIC provider_http_server.cpp)
+target_include_directories(nodus_vision_provider_http PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(nodus_vision_provider_http PUBLIC nodus_vision_core Boost::system)
+target_compile_features(nodus_vision_provider_http PUBLIC cxx_std_17)
+target_compile_options(nodus_vision_provider_http PRIVATE -Wall -Wextra)

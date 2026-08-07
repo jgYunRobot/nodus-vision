@@ -1,0 +1,5 @@
+add_executable(config_test_vision_config test_vision_config.cpp)
+set_target_properties(config_test_vision_config PROPERTIES OUTPUT_NAME test_vision_config)
+target_link_libraries(config_test_vision_config PRIVATE nodus_vision_config GTest::gtest_main)
+target_compile_features(config_test_vision_config PRIVATE cxx_std_17)
+add_test(NAME config_test_vision_config COMMAND config_test_vision_config)

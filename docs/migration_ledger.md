@@ -47,3 +47,13 @@ No native dependency source was copied or added by the foundation task.
 
 The pinned librealsense revision configures its declared `v3.12.0` nlohmann/json dependency during
 CMake configure. It is a build-tree dependency only; Nodus Vision does not import PA-CONTROL's copy.
+
+## Phase 2 native dependencies
+
+| Dependency | Source | Exact revision/version | License | Consuming target |
+|---|---|---|---|---|
+| Boost.Asio/Beast/JSON/System | Ubuntu package `libboost-all-dev` | `1.83.0.1ubuntu2` | BSL-1.0 | `nodus_vision_config`, `nodus_vision_provider_http`, `nodus_vision_runtime` |
+
+Boost 1.83.0 is a host-provided pinned development dependency for the C++17 Phase 2 HTTP server and
+typed JSON parser. Its version is resolved by CMake and recorded here rather than inherited from
+PA-CONTROL.

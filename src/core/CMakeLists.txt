@@ -2,6 +2,7 @@ add_library(
     nodus_vision_core
     STATIC
     camera_contracts.cpp
+    provider_health.cpp
     frame_store.cpp
 )
 

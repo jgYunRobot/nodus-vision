@@ -1,3 +1,6 @@
 add_subdirectory(contracts)
 add_subdirectory(core)
 add_subdirectory(adapters)
+add_subdirectory(config)
+add_subdirectory(provider)
+add_subdirectory(integration)

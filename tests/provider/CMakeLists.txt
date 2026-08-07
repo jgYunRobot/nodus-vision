@@ -1,0 +1,5 @@
+add_executable(provider_test_http_server test_http_server.cpp)
+set_target_properties(provider_test_http_server PROPERTIES OUTPUT_NAME test_http_server)
+target_link_libraries(provider_test_http_server PRIVATE nodus_vision_provider_http GTest::gtest_main Boost::system)
+target_compile_features(provider_test_http_server PRIVATE cxx_std_17)
+add_test(NAME provider_test_http_server COMMAND provider_test_http_server)

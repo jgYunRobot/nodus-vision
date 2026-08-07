@@ -1,5 +1,44 @@
 # Progress
 
+## 2026-08-07 - Phase 2 strict provider configuration and lifecycle
+
+### Changes
+
+- Added strict typed JSON parsing and the canonical Phase 2 config schema/example. Root and parsed
+  nested objects reject unknown fields; IDs, stream bounds, calibration matrix, bind/advertise
+  separation, provider limits, and Intel serial selection are validated before startup.
+- Added a bounded single-worker Boost.Asio/Beast listener for `GET /health` and `GET /metadata`.
+  It enforces request header/body/deadline and active-connection bounds without per-request thread
+  creation, and responses use `Cache-Control: no-store` plus the common JSON error shape.
+- Added `VisionApplication` ordered composition: parse-config caller, construct adapter/store, bind
+  provider, start camera or retain a degraded server, then stop acceptor before capture and adapter
+  teardown. The executable converts SIGINT/SIGTERM through `boost::asio::signal_set`.
+- Recorded the exact host Boost dependency version and BSL-1.0 license in the migration ledger.
+
+### Status
+
+- Phase 2 is complete with a fake camera: `/health` and `/metadata` are served without Pilot,
+  recording, Control, or physical D435 access. A camera start failure leaves the provider in an
+  explicit degraded state rather than failing the bound HTTP process.
+
+### Validation
+
+- `cmake --preset debug` and `cmake --build --preset debug` passed.
+- `ctest --test-dir build/debug --output-on-failure` passed 8/8 tests, including strict config
+  rejection, direct health/metadata HTTP responses, fake provider ready startup, and idempotent
+  application shutdown.
+- Public-header vendor scan and PA-CONTROL path search remain clean. `git diff --check` is run at
+  the phase staging gate.
+- `clang-format` 18.1.8 remains unavailable on this host; this required command cannot be executed
+  until the host tool is installed. No test or compiler warning policy was removed.
+- No physical camera, `/dev/bus/usb`, Pilot, recording, Portal, Operator, MetaGate, or Control path
+  was executed or changed.
+
+### Next goals
+
+- Implement Phase 3 latest JPEG cache, direct snapshot/MJPEG/query endpoints, and PCD1 v2 binary
+  point-cloud data plane with fake-adapter backpressure acceptance.
+
 ## 2026-08-07 - Phase 1 camera-neutral core and adapters
 
 ### Changes

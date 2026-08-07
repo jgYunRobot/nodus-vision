@@ -1,0 +1,5 @@
+add_executable(nodus-vision main.cpp)
+target_link_libraries(nodus-vision PRIVATE nodus_vision_runtime Boost::system)
+target_compile_features(nodus-vision PRIVATE cxx_std_17)
+target_compile_options(nodus-vision PRIVATE -Wall -Wextra)
+install(TARGETS nodus-vision RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
