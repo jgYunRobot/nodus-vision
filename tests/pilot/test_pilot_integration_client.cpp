@@ -26,10 +26,21 @@ namespace beast = boost::beast;
 namespace http = beast::http;
 using tcp = asio::ip::tcp;
 
+enum class CatalogResponseMode {
+    e_ACCEPT,
+    e_RETRY_ONCE,
+    e_NOT_FOUND,
+    e_STALE_GENERATION,
+    e_MALFORMED_ACCEPTED,
+    e_UNKNOWN_CONFLICT,
+    e_PERMANENT_CONFLICT,
+};
+
 class FakePilotLifecycle {
    public:
-    explicit FakePilotLifecycle(bool retry_catalog_once = false)
-        : m_retry_catalog_once(retry_catalog_once), m_acceptor(m_io_context) {
+    explicit FakePilotLifecycle(
+        CatalogResponseMode catalog_response_mode = CatalogResponseMode::e_ACCEPT)
+        : m_catalog_response_mode(catalog_response_mode), m_acceptor(m_io_context) {
         m_acceptor.open(tcp::v4());
         m_acceptor.set_option(asio::socket_base::reuse_address(true));
         m_acceptor.bind({asio::ip::address_v4::loopback(), 0});
@@ -85,9 +96,23 @@ class FakePilotLifecycle {
                 body =
                     R"json({"session_id":"opaque/session secret","server_instance_id":"pilot-instance","accepted_protocol_version":1,"accepted_schema_versions":[1],"heartbeat_interval_ms":20,"lease_timeout_ms":100,"server_time":0})json";
             } else if (target.find("/endpoint-catalog") != std::string::npos) {
-                if (m_retry_catalog_once && !m_catalog_retry_sent) {
+                if (m_catalog_response_mode == CatalogResponseMode::e_RETRY_ONCE &&
+                    !m_catalog_retry_sent) {
                     m_catalog_retry_sent = true;
                     status = http::status::service_unavailable;
+                } else if (m_catalog_response_mode == CatalogResponseMode::e_NOT_FOUND) {
+                    status = http::status::not_found;
+                } else if (m_catalog_response_mode == CatalogResponseMode::e_STALE_GENERATION) {
+                    status = http::status::conflict;
+                    body = R"json({"error":{"code":"stale_catalog_generation"}})json";
+                } else if (m_catalog_response_mode == CatalogResponseMode::e_MALFORMED_ACCEPTED) {
+                    body = R"json({"status":"accepted"})json";
+                } else if (m_catalog_response_mode == CatalogResponseMode::e_UNKNOWN_CONFLICT) {
+                    status = http::status::conflict;
+                    body = R"json({"error":{"code":"unexpected_catalog_conflict"}})json";
+                } else if (m_catalog_response_mode == CatalogResponseMode::e_PERMANENT_CONFLICT) {
+                    status = http::status::conflict;
+                    body = R"json({"error":{"code":"duplicate_descriptor_id"}})json";
                 } else {
                     body =
                         R"json({"status":"accepted","server_instance_id":"pilot-instance","component_id":"camera.fake","session_generation":1,"catalog_generation":1,"catalog_revision":1,"descriptor_count":9})json";
@@ -106,7 +131,7 @@ class FakePilotLifecycle {
     tcp::acceptor m_acceptor;
     unsigned short m_port{0};
     std::atomic<bool> m_running{true};
-    bool m_retry_catalog_once{false};
+    CatalogResponseMode m_catalog_response_mode{CatalogResponseMode::e_ACCEPT};
     bool m_catalog_retry_sent{false};
     mutable std::mutex m_mutex;
     std::vector<std::pair<std::string, std::string>> m_requests;
@@ -135,6 +160,17 @@ bool waitFor(Predicate predicate) {
         std::this_thread::sleep_for(std::chrono::milliseconds(2));
     }
     return predicate();
+}
+
+int countRequests(const std::vector<std::pair<std::string, std::string>>& requests,
+                  const std::string& target_fragment) {
+    int count = 0;
+    for (const auto& request : requests) {
+        if (request.first.find(target_fragment) != std::string::npos) {
+            ++count;
+        }
+    }
+    return count;
 }
 
 }  // namespace
@@ -188,7 +224,7 @@ TEST(PilotIntegrationClient, DisabledClientMakesNoNetworkRequest) {
 }
 
 TEST(PilotIntegrationClient, RetriesSameCatalogPublicationWithoutPayloadRelay) {
-    FakePilotLifecycle server(true);
+    FakePilotLifecycle server(CatalogResponseMode::e_RETRY_ONCE);
     PilotIntegrationClient client(makeConfig(server.getBaseUrl()),
                                   []() { return "vision-00112233445566778899aabbccddeeff"; });
     client.startClient(ProviderState::e_READY);
@@ -228,6 +264,49 @@ TEST(PilotIntegrationClient, RepeatedStartAndStopOwnsOneWorkerAtATime) {
             [&client]() { return client.getSnapshot().state == PilotIntegrationState::e_ONLINE; }));
         client.stopClient();
         EXPECT_EQ(client.getSnapshot().state, PilotIntegrationState::e_STOPPED);
+    }
+}
+
+TEST(PilotIntegrationClient, BoundsFreshRegistrationAfterRecoverableCatalogFailures) {
+    const std::vector<CatalogResponseMode> recoverable_modes = {
+        CatalogResponseMode::e_NOT_FOUND,
+        CatalogResponseMode::e_STALE_GENERATION,
+        CatalogResponseMode::e_MALFORMED_ACCEPTED,
+    };
+    for (const CatalogResponseMode mode : recoverable_modes) {
+        FakePilotLifecycle server(mode);
+        VisionConfig config = makeConfig(server.getBaseUrl());
+        config.pilot.retry_initial_delay_ms = 20;
+        config.pilot.retry_max_delay_ms = 20;
+        PilotIntegrationClient client(config,
+                                      []() { return "vision-00112233445566778899aabbccddeeff"; });
+        client.startClient(ProviderState::e_READY);
+        ASSERT_TRUE(waitFor(
+            [&server]() { return countRequests(server.getRequests(), "/endpoint-catalog") >= 2; }));
+        std::this_thread::sleep_for(std::chrono::milliseconds(70));
+        client.stopClient();
+        EXPECT_LE(countRequests(server.getRequests(), "/api/v1/components/register"), 5);
+        EXPECT_LE(countRequests(server.getRequests(), "/endpoint-catalog"), 5);
+    }
+}
+
+TEST(PilotIntegrationClient, RejectsUnknownAndPermanentCatalogConflictsWithoutReregistration) {
+    const std::vector<CatalogResponseMode> contract_fault_modes = {
+        CatalogResponseMode::e_UNKNOWN_CONFLICT,
+        CatalogResponseMode::e_PERMANENT_CONFLICT,
+    };
+    for (const CatalogResponseMode mode : contract_fault_modes) {
+        FakePilotLifecycle server(mode);
+        PilotIntegrationClient client(makeConfig(server.getBaseUrl()),
+                                      []() { return "vision-00112233445566778899aabbccddeeff"; });
+        client.startClient(ProviderState::e_READY);
+        ASSERT_TRUE(waitFor([&client]() {
+            return client.getSnapshot().state == PilotIntegrationState::e_CONTRACT_FAULT;
+        }));
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        client.stopClient();
+        EXPECT_EQ(countRequests(server.getRequests(), "/api/v1/components/register"), 1);
+        EXPECT_EQ(countRequests(server.getRequests(), "/endpoint-catalog"), 1);
     }
 }
 

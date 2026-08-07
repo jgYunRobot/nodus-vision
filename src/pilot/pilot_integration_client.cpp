@@ -61,6 +61,20 @@ std::string encodePathSegment(const std::string& input) {
 
 bool isContractStatus(int status) { return status == 400 || status == 413 || status == 415; }
 
+enum class CatalogConflictDisposition { e_REPLACE_SESSION, e_CONTRACT_FAULT, e_UNKNOWN };
+
+CatalogConflictDisposition classifyCatalogConflict(const std::string& error_code) {
+    if (error_code == "stale_catalog_generation" || error_code == "session_expired" ||
+        error_code == "stale_sequence") {
+        return CatalogConflictDisposition::e_REPLACE_SESSION;
+    }
+    if (error_code == "idempotency_conflict" || error_code == "duplicate_descriptor_id" ||
+        error_code == "undeclared_endpoint_capability") {
+        return CatalogConflictDisposition::e_CONTRACT_FAULT;
+    }
+    return CatalogConflictDisposition::e_UNKNOWN;
+}
+
 std::string getErrorCode(const std::string& body) {
     boost::json::error_code error;
     const boost::json::value value = boost::json::parse(body, error);
@@ -131,20 +145,29 @@ class PilotIntegrationClient::Impl {
                 }
             }
             const std::string error_code = getErrorCode(result.body);
-            if (result.status == 409 && error_code == "stale_catalog_generation") {
-                setSnapshot(PilotIntegrationState::e_RECOVERING, "stale_catalog_generation");
-                return PublishResult::e_REPLACE_SESSION;
-            }
-            if (result.status == 409 && error_code == "idempotency_conflict") {
-                setSnapshot(PilotIntegrationState::e_CONTRACT_FAULT,
-                            "catalog_idempotency_conflict");
-                return PublishResult::e_CONTRACT_FAULT;
+            if (result.status == 409) {
+                switch (classifyCatalogConflict(error_code)) {
+                    case CatalogConflictDisposition::e_REPLACE_SESSION:
+                        setSnapshot(PilotIntegrationState::e_RECOVERING,
+                                    error_code == "stale_catalog_generation"
+                                        ? "stale_catalog_generation"
+                                        : "catalog_session_replaced");
+                        return PublishResult::e_REPLACE_SESSION;
+                    case CatalogConflictDisposition::e_CONTRACT_FAULT:
+                        setSnapshot(PilotIntegrationState::e_CONTRACT_FAULT,
+                                    "catalog_contract_conflict");
+                        return PublishResult::e_CONTRACT_FAULT;
+                    case CatalogConflictDisposition::e_UNKNOWN:
+                        setSnapshot(PilotIntegrationState::e_CONTRACT_FAULT,
+                                    "catalog_unknown_conflict");
+                        return PublishResult::e_CONTRACT_FAULT;
+                }
             }
             if (isContractStatus(result.status)) {
                 setSnapshot(PilotIntegrationState::e_CONTRACT_FAULT, "catalog_contract_error");
                 return PublishResult::e_CONTRACT_FAULT;
             }
-            if (result.status == 404 || (result.status == 409 && !error_code.empty())) {
+            if (result.status == 404) {
                 setSnapshot(PilotIntegrationState::e_RECOVERING, "catalog_session_replaced");
                 return PublishResult::e_REPLACE_SESSION;
             }
@@ -207,12 +230,12 @@ class PilotIntegrationClient::Impl {
                     }
                     if (publish_result == PublishResult::e_REPLACE_SESSION) {
                         session_id.clear();
-                        continue;
-                    }
-                    updateSuccess();
-                    retry_count = 0;
-                    if (runSession(session_id, response.heartbeat_interval_ms, sequence)) {
-                        break;
+                    } else {
+                        updateSuccess();
+                        retry_count = 0;
+                        if (runSession(session_id, response.heartbeat_interval_ms, sequence)) {
+                            break;
+                        }
                     }
                 } catch (const std::exception&) {
                     setSnapshot(PilotIntegrationState::e_RECOVERING,
