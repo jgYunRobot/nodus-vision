@@ -1,5 +1,37 @@
 # Progress
 
+## 2026-08-08 - Phase 4 P4-2 bounded public HTTP transport
+
+### Changes
+
+- Added a lifecycle-neutral C++17 Boost.Asio/Beast transport for one-shot public HTTP requests.
+  It parses only absolute HTTP base URLs, closes every connection, bounds response bodies, and
+  accepts only `application/json` responses.
+- Applied bounded resolution, connect, write, and read behavior; an external stop cancels the
+  active resolver/socket and releases the waiting lifecycle caller without retrying or deciding
+  session state.
+- Added a local fake-Pilot HTTP test for JSON success, non-JSON rejection, oversized bodies,
+  deadline expiry, and explicit cancellation. The fake server handles lifecycle-shaped HTTP only;
+  it receives no Vision image, query, point-cloud, or stream payload.
+
+### Status
+
+- P4-2 is complete. Retry classification, registration/session ownership, and catalog policy are
+  intentionally deferred to P4-3 and P4-4.
+
+### Validation
+
+- `clang-format-18` formatted the new C++ transport and test files.
+- `cmake --build --preset debug` passed and `pilot_test_http_transport` passed against a local
+  fake Pilot server.
+- No Pilot source import/process, physical camera, recording, geometry extension, or payload relay
+  was used.
+
+### Next goals
+
+- Implement P4-3 single-worker registration, heartbeat/state sequencing, bounded disconnect, and
+  redacted lifecycle health snapshots.
+
 ## 2026-08-08 - Phase 4 P4-1 configuration, DTO, and catalog
 
 ### Changes

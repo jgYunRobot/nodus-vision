@@ -2,6 +2,7 @@ add_library(
     nodus_vision_pilot_contracts
     STATIC
     pilot_contract_codec.cpp
+    pilot_http_transport.cpp
     vision_endpoint_catalog.cpp
 )
 target_include_directories(nodus_vision_pilot_contracts PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
