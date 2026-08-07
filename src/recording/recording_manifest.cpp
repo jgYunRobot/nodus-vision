@@ -26,6 +26,15 @@ bool isStrictlyAfter(const FrameIdentity& candidate, const FrameIdentity& previo
             candidate.frame_number > previous.frame_number);
 }
 
+boost::json::object serializeFrameIdentity(const FrameIdentity& identity) {
+    boost::json::object result;
+    result["capture_generation"] = identity.capture_generation;
+    result["frame_number"] = identity.frame_number;
+    result["capture_timestamp_ns"] = identity.capture_timestamp_ns;
+    result["capture_unix_epoch_ns"] = identity.capture_unix_epoch_ns;
+    return result;
+}
+
 }  // namespace
 
 RecordingArtifactDigest calculateRecordingArtifactDigest(const std::filesystem::path& root,
@@ -65,12 +74,17 @@ RecordingArtifactDigest calculateRecordingArtifactDigest(const std::filesystem::
     return {relative_path, std::filesystem::file_size(path), hex.str()};
 }
 
-std::string serializeFinalizedRecordingManifest(const std::string& recording_id,
-                                                std::uint64_t submitted_frame_count,
+std::string serializeFinalizedRecordingManifest(const FinalizedRecordingManifest& manifest,
                                                 const RecordingArtifactDigest& video,
                                                 const RecordingArtifactDigest& sidecar) {
-    if (!isRecordingIdValid(recording_id) || video.relative_path != "color.mp4" ||
-        sidecar.relative_path != "frames.jsonl") {
+    if (!isRecordingIdValid(manifest.recording_id) || manifest.component_id.empty() ||
+        manifest.instance_id.empty() || manifest.device_id.empty() ||
+        manifest.sensor_frame.empty() || manifest.calibration_id.empty() || manifest.width <= 0 ||
+        manifest.height <= 0 || manifest.fps <= 0 ||
+        manifest.started_monotonic_ns > manifest.stopped_monotonic_ns ||
+        manifest.started_unix_epoch_ns > manifest.stopped_unix_epoch_ns ||
+        manifest.submitted_frame_count > manifest.admitted_frame_count ||
+        video.relative_path != "color.mp4" || sidecar.relative_path != "frames.jsonl") {
         throw std::invalid_argument("Recording manifest values are invalid.");
     }
     auto make_artifact = [](const RecordingArtifactDigest& digest) {
@@ -83,12 +97,49 @@ std::string serializeFinalizedRecordingManifest(const std::string& recording_id,
     boost::json::object root;
     root["schema_version"] = 1;
     root["state"] = "finalized";
-    root["recording_id"] = recording_id;
-    root["submitted_frame_count"] = submitted_frame_count;
+    root["recording_id"] = manifest.recording_id;
+    root["component_id"] = manifest.component_id;
+    root["instance_id"] = manifest.instance_id;
+    root["device_id"] = manifest.device_id;
+    root["capture_generation"] = manifest.has_frames ? manifest.first_frame.capture_generation : 0U;
+    root["sensor_frame"] = manifest.sensor_frame;
+    root["calibration_id"] = manifest.calibration_id;
+    boost::json::object profile;
+    profile["width"] = manifest.width;
+    profile["height"] = manifest.height;
+    profile["fps"] = manifest.fps;
+    profile["input_pixel_format"] = "rgb24";
+    root["profile"] = std::move(profile);
+    boost::json::object video_details;
+    video_details["container"] = "mp4";
+    video_details["codec"] = "h264";
+    video_details["encoder"] = "libx264";
+    video_details["pixel_format"] = "yuv420p";
+    video_details["time_base_num"] = 1;
+    video_details["time_base_den"] = manifest.fps;
+    root["video"] = std::move(video_details);
+    root["started_monotonic_ns"] = manifest.started_monotonic_ns;
+    root["started_unix_epoch_ns"] = manifest.started_unix_epoch_ns;
+    root["stopped_monotonic_ns"] = manifest.stopped_monotonic_ns;
+    root["stopped_unix_epoch_ns"] = manifest.stopped_unix_epoch_ns;
+    root["admitted_frame_count"] = manifest.admitted_frame_count;
+    root["submitted_frame_count"] = manifest.submitted_frame_count;
+    root["recording_drop_count"] = manifest.recording_drop_count;
+    root["first_frame"] = manifest.has_frames
+                              ? boost::json::value(serializeFrameIdentity(manifest.first_frame))
+                              : boost::json::value(nullptr);
+    root["last_frame"] = manifest.has_frames
+                             ? boost::json::value(serializeFrameIdentity(manifest.last_frame))
+                             : boost::json::value(nullptr);
     boost::json::array artifacts;
     artifacts.emplace_back(make_artifact(video));
     artifacts.emplace_back(make_artifact(sidecar));
     root["artifacts"] = std::move(artifacts);
+    root["start_request_id"] = manifest.start_request_id;
+    root["stop_request_id"] = manifest.stop_request_id.empty()
+                                  ? boost::json::value(nullptr)
+                                  : boost::json::value(manifest.stop_request_id);
+    root["stop_reason"] = "requested";
     return boost::json::serialize(root);
 }
 

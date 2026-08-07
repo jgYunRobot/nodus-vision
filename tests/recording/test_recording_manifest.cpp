@@ -2,6 +2,7 @@
 
 #include <gtest/gtest.h>
 
+#include <boost/json.hpp>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -88,6 +89,44 @@ TEST(RecordingManifest, CalculatesBoundedSha256ForRegularArtifact) {
     EXPECT_EQ(digest.size_bytes, 3U);
     EXPECT_EQ(digest.sha256_hex,
               "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+}
+
+TEST(RecordingManifest, SerializesFinalizedIdentityCountersAndArtifactDigests) {
+    FinalizedRecordingManifest manifest{"episode-0001-front",
+                                        "camera.front",
+                                        "vision-test-1",
+                                        "front_d435",
+                                        "front_optical",
+                                        "front_v1",
+                                        64,
+                                        64,
+                                        30,
+                                        10,
+                                        20,
+                                        30,
+                                        40,
+                                        3U,
+                                        2U,
+                                        1U,
+                                        {1U, 41U, 101, 201},
+                                        {1U, 42U, 102, 202},
+                                        true,
+                                        "start-001",
+                                        "stop-001"};
+    const RecordingArtifactDigest video{
+        "color.mp4", 123U, "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"};
+    const RecordingArtifactDigest sidecar{
+        "frames.jsonl", 456U, "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"};
+    const boost::json::object result =
+        boost::json::parse(serializeFinalizedRecordingManifest(manifest, video, sidecar))
+            .as_object();
+    EXPECT_EQ(result.at("state").as_string(), "finalized");
+    EXPECT_EQ(result.at("component_id").as_string(), "camera.front");
+    EXPECT_EQ(result.at("profile").as_object().at("width").as_int64(), 64);
+    EXPECT_EQ(result.at("submitted_frame_count").to_number<std::uint64_t>(), 2U);
+    EXPECT_EQ(result.at("first_frame").as_object().at("frame_number").to_number<std::uint64_t>(),
+              41U);
+    EXPECT_EQ(result.at("artifacts").as_array().size(), 2U);
 }
 
 }  // namespace nodus_vision

@@ -23,6 +23,9 @@ struct RecordingManagerConfig {
     int bit_rate_bps{0};
     std::string sensor_frame;
     std::string calibration_id;
+    std::string component_id;
+    std::string device_id;
+    std::string instance_id;
 };
 
 struct RecordingStatus {
@@ -31,6 +34,14 @@ struct RecordingStatus {
     std::uint64_t admitted_frame_count{0U};
     std::uint64_t submitted_frame_count{0U};
     std::uint64_t recording_drop_count{0U};
+    std::size_t queue_depth{0U};
+    std::size_t queue_capacity{0U};
+    std::size_t orphan_staging_count{0U};
+    std::int64_t started_monotonic_ns{0};
+    std::int64_t started_unix_epoch_ns{0};
+    std::int64_t stopped_monotonic_ns{0};
+    std::int64_t stopped_unix_epoch_ns{0};
+    std::string finalized_artifact_reference;
 };
 
 enum class RecordingStartResult { e_STARTED, e_REPLAYED };

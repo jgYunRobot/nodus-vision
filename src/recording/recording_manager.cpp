@@ -3,6 +3,7 @@
 #include "recording_manager.hpp"
 
 #include <atomic>
+#include <chrono>
 #include <condition_variable>
 #include <mutex>
 #include <stdexcept>
@@ -23,6 +24,18 @@ bool isStrictlyAfter(const FrameIdentity& candidate, const FrameIdentity& previo
             candidate.frame_number > previous.frame_number);
 }
 
+std::int64_t getMonotonicNowNs() {
+    return std::chrono::duration_cast<std::chrono::nanoseconds>(
+               std::chrono::steady_clock::now().time_since_epoch())
+        .count();
+}
+
+std::int64_t getUnixNowNs() {
+    return std::chrono::duration_cast<std::chrono::nanoseconds>(
+               std::chrono::system_clock::now().time_since_epoch())
+        .count();
+}
+
 }  // namespace
 
 class RecordingManager::Impl {
@@ -32,7 +45,8 @@ class RecordingManager::Impl {
           m_store(m_config.root),
           m_queue(m_config.queue_capacity_frames) {
         if (m_config.queue_capacity_frames == 0U || m_config.sensor_frame.empty() ||
-            m_config.calibration_id.empty()) {
+            m_config.calibration_id.empty() || m_config.component_id.empty() ||
+            m_config.device_id.empty() || m_config.instance_id.empty()) {
             throw std::invalid_argument("Recording manager configuration is invalid.");
         }
     }
@@ -82,6 +96,8 @@ class RecordingManager::Impl {
             m_queue_count = 0U;
             m_stop_requested = false;
             m_has_identity = false;
+            m_started_monotonic_ns = getMonotonicNowNs();
+            m_started_unix_epoch_ns = getUnixNowNs();
             m_worker = std::thread(&Impl::runWorker, this);
             m_state = RecordingState::e_RECORDING;
             m_admitting.store(true, std::memory_order_release);
@@ -150,9 +166,32 @@ class RecordingManager::Impl {
                 calculateRecordingArtifactDigest(m_artifact_paths.staging_directory, "color.mp4");
             const RecordingArtifactDigest sidecar = calculateRecordingArtifactDigest(
                 m_artifact_paths.staging_directory, "frames.jsonl");
+            m_stopped_monotonic_ns = getMonotonicNowNs();
+            m_stopped_unix_epoch_ns = getUnixNowNs();
+            const FinalizedRecordingManifest manifest{
+                m_recording_id,
+                m_config.component_id,
+                m_config.instance_id,
+                m_config.device_id,
+                m_config.sensor_frame,
+                m_config.calibration_id,
+                m_config.width,
+                m_config.height,
+                m_config.fps,
+                m_started_monotonic_ns,
+                m_started_unix_epoch_ns,
+                m_stopped_monotonic_ns,
+                m_stopped_unix_epoch_ns,
+                m_admitted_frame_count,
+                m_submitted_frame_count,
+                m_recording_drop_count + m_contention_drop_count.load(std::memory_order_relaxed),
+                m_first_identity,
+                m_last_identity,
+                m_has_identity,
+                m_start_request_id,
+                m_stop_request_id};
             m_store.writeFinalizedManifest(
-                m_artifact_paths, serializeFinalizedRecordingManifest(
-                                      m_recording_id, m_submitted_frame_count, video, sidecar));
+                m_artifact_paths, serializeFinalizedRecordingManifest(manifest, video, sidecar));
             m_store.activateFinalized(m_artifact_paths);
             m_state = RecordingState::e_FINALIZED;
         } catch (...) {
@@ -166,13 +205,18 @@ class RecordingManager::Impl {
             !isRecordingIdValid(request.recording_id)) {
             throw std::invalid_argument("Recording stop request has an unsafe identity.");
         }
-        const std::string canonical = "{\"schema_version\":1,\"request_id\":\"" +
-                                      request.request_id + "\",\"recording_id\":\"" +
-                                      request.recording_id + "\"}";
+        const std::string canonical = request.canonical_json.empty()
+                                          ? "{\"schema_version\":1,\"request_id\":\"" +
+                                                request.request_id + "\",\"recording_id\":\"" +
+                                                request.recording_id + "\"}"
+                                          : request.canonical_json;
         {
             std::lock_guard<std::mutex> lock(m_mutex);
             if (request.request_id == m_stop_request_id) {
                 if (canonical == m_stop_canonical) {
+                    if (m_state == RecordingState::e_FAULTED) {
+                        throw std::runtime_error("Recording finalization faulted.");
+                    }
                     return RecordingStopResult::e_REPLAYED;
                 }
                 throw std::runtime_error(
@@ -182,17 +226,41 @@ class RecordingManager::Impl {
                 throw std::runtime_error("Recording is unknown.");
             }
         }
+        m_store.writeStopRequest(m_artifact_paths, canonical);
+        {
+            std::lock_guard<std::mutex> lock(m_mutex);
+            m_stop_request_id = request.request_id;
+            m_stop_canonical = canonical;
+        }
         finalize();
         std::lock_guard<std::mutex> lock(m_mutex);
-        m_stop_request_id = request.request_id;
-        m_stop_canonical = canonical;
+        if (m_state == RecordingState::e_FAULTED) {
+            throw std::runtime_error("Recording finalization faulted.");
+        }
         return RecordingStopResult::e_FINALIZED;
     }
 
     RecordingStatus getStatus() const {
-        std::lock_guard<std::mutex> lock(m_mutex);
-        return {m_state, m_recording_id, m_admitted_frame_count, m_submitted_frame_count,
-                m_recording_drop_count + m_contention_drop_count.load(std::memory_order_relaxed)};
+        RecordingStatus status;
+        {
+            std::lock_guard<std::mutex> lock(m_mutex);
+            status = {
+                m_state,
+                m_recording_id,
+                m_admitted_frame_count,
+                m_submitted_frame_count,
+                m_recording_drop_count + m_contention_drop_count.load(std::memory_order_relaxed),
+                m_queue_count,
+                m_queue.size(),
+                0U,
+                m_started_monotonic_ns,
+                m_started_unix_epoch_ns,
+                m_stopped_monotonic_ns,
+                m_stopped_unix_epoch_ns,
+                m_state == RecordingState::e_FINALIZED ? "finalized/" + m_recording_id : ""};
+        }
+        status.orphan_staging_count = m_store.getStagingCount();
+        return status;
     }
 
    private:
@@ -228,6 +296,9 @@ class RecordingManager::Impl {
                 m_sidecar->append({index, static_cast<std::int64_t>(index), snapshot.identity});
                 {
                     std::lock_guard<std::mutex> lock(m_mutex);
+                    if (!m_has_identity) {
+                        m_first_identity = snapshot.identity;
+                    }
                     m_last_identity = snapshot.identity;
                     m_has_identity = true;
                     ++m_submitted_frame_count;
@@ -255,6 +326,7 @@ class RecordingManager::Impl {
     std::string m_start_canonical;
     std::string m_stop_request_id;
     std::string m_stop_canonical;
+    FrameIdentity m_first_identity;
     FrameIdentity m_last_identity;
     std::size_t m_queue_head{0U};
     std::size_t m_queue_tail{0U};
@@ -265,6 +337,10 @@ class RecordingManager::Impl {
     std::atomic<std::uint64_t> m_contention_drop_count{0U};
     RecordingState m_state{RecordingState::e_IDLE};
     std::atomic<bool> m_admitting{false};
+    std::int64_t m_started_monotonic_ns{0};
+    std::int64_t m_started_unix_epoch_ns{0};
+    std::int64_t m_stopped_monotonic_ns{0};
+    std::int64_t m_stopped_unix_epoch_ns{0};
     bool m_has_identity{false};
     bool m_stop_requested{false};
 };

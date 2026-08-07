@@ -1,5 +1,30 @@
 # Progress
 
+## 2026-08-08 - Phase 5 P5-7 recording acceptance and handoff
+
+### Changes
+
+- Preserved full accepted start/stop request bytes for idempotency evidence, persisted the stop
+  request before finalization, and fail closed when a worker fault prevents finalization.
+- Completed finalized manifest metadata with component/process/device identity, profile/video timing,
+  counters, frame bounds, request IDs, and SHA-256 artifact digests. Current and health responses
+  now expose only low-rate recording status and a relative finalized artifact reference.
+- Hardened durable file writes against short writes and verified direct fake-camera HTTP lifecycle
+  artifacts, including non-empty finalized recording evidence.
+
+### Status
+
+- Phase 5 is complete. Vision retains only camera-local artifact ownership; Pilot remains
+  discovery-only, and MetaGate/Gym episode or dataset commit work remains external. No physical
+  camera or product integration acceptance was performed.
+
+### Validation
+
+- `cmake --build --preset debug` and complete `ctest --test-dir build/debug --output-on-failure`
+  passed (23/23).
+- `recording_test_manager` passed 20 consecutive runs after its non-blocking ingress fixture was
+  made contention-safe. `git diff --check` passed.
+
 ## 2026-08-08 - Phase 5 P5-6 recording catalog gate
 
 ### Changes

@@ -38,10 +38,23 @@ void writeAtomically(const std::filesystem::path& directory, const std::string& 
     if (descriptor < 0) {
         throw std::runtime_error("Recording request temporary file cannot be created.");
     }
-    const ssize_t written = write(descriptor, contents.data(), contents.size());
+    std::size_t total_written = 0U;
+    while (total_written < contents.size()) {
+        const ssize_t written =
+            write(descriptor, contents.data() + total_written, contents.size() - total_written);
+        if (written > 0) {
+            total_written += static_cast<std::size_t>(written);
+            continue;
+        }
+        if (written < 0 && errno == EINTR) {
+            continue;
+        }
+        close(descriptor);
+        throw std::runtime_error("Recording request file write failed.");
+    }
     const int sync_result = fsync(descriptor);
     const int close_result = close(descriptor);
-    if (written != static_cast<ssize_t>(contents.size()) || sync_result != 0 || close_result != 0) {
+    if (sync_result != 0 || close_result != 0) {
         throw std::runtime_error("Recording request file write failed.");
     }
     std::error_code error;
@@ -117,6 +130,15 @@ void RecordingStore::activateFinalized(const RecordingArtifactPaths& paths) {
     }
     syncDirectory(staging_parent);
     syncDirectory(finalized_parent);
+}
+
+void RecordingStore::writeStopRequest(const RecordingArtifactPaths& paths,
+                                      const std::string& contents) {
+    if (paths.staging_directory.parent_path() != m_root / ".staging" ||
+        std::filesystem::is_symlink(std::filesystem::symlink_status(paths.staging_directory))) {
+        throw std::invalid_argument("Recording stop staging path is unsafe.");
+    }
+    writeAtomically(paths.staging_directory, "stop_request.json", contents);
 }
 
 void RecordingStore::writeFinalizedManifest(const RecordingArtifactPaths& paths,

@@ -42,6 +42,9 @@ std::string serializeRecordingStartRequest(const RecordingStartRequest& request)
         !isRecordingIdValid(request.recording_id)) {
         throw std::invalid_argument("Recording start request has an unsafe identity.");
     }
+    if (!request.canonical_json.empty()) {
+        return request.canonical_json;
+    }
     boost::json::object root;
     root["schema_version"] = 1;
     root["request_id"] = request.request_id;

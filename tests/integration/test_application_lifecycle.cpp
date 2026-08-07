@@ -13,6 +13,7 @@
 #include <chrono>
 #include <cstdlib>
 #include <filesystem>
+#include <fstream>
 #include <memory>
 #include <string>
 #include <thread>
@@ -219,7 +220,7 @@ TEST(VisionApplication, ServesFakeDataPlaneAndRestartsCleanly) {
     const http::response<http::string_body> health =
         requestResponse(first_port, http::verb::get, "/health");
     const boost::json::object health_json = boost::json::parse(health.body()).as_object();
-    ASSERT_EQ(health_json.size(), 6U);
+    ASSERT_EQ(health_json.size(), 7U);
     EXPECT_EQ(health_json.at("schema_version"), 1);
     EXPECT_EQ(health_json.at("state"), "ready");
     ASSERT_TRUE(health_json.at("pilot").is_object());
@@ -229,6 +230,11 @@ TEST(VisionApplication, ServesFakeDataPlaneAndRestartsCleanly) {
     EXPECT_EQ(pilot.at("state"), "disabled");
     EXPECT_TRUE(pilot.at("server_instance_id").is_null());
     EXPECT_EQ(pilot.at("catalog_generation"), 0U);
+    ASSERT_TRUE(health_json.at("recording").is_object());
+    const boost::json::object& recording = health_json.at("recording").as_object();
+    EXPECT_FALSE(recording.at("enabled").as_bool());
+    EXPECT_EQ(recording.at("state"), "disabled");
+    EXPECT_TRUE(recording.at("recording_id").is_null());
     EXPECT_EQ(pilot.at("descriptor_count"), 0);
     EXPECT_EQ(pilot.at("retry_count"), 0);
     EXPECT_TRUE(pilot.at("last_success_age_ms").is_null());
@@ -322,6 +328,17 @@ TEST(VisionApplication, RecordsThroughDirectHttpLifecycle) {
               http::status::created);
     EXPECT_EQ(requestResponse(port, http::verb::post, "/recordings/start", start).result(),
               http::status::ok);
+    const http::response<http::string_body> health =
+        requestResponse(port, http::verb::get, "/health");
+    EXPECT_TRUE(boost::json::parse(health.body())
+                    .as_object()
+                    .at("recording")
+                    .as_object()
+                    .at("enabled")
+                    .as_bool());
+    ASSERT_TRUE(waitFor([&application]() {
+        return application.getHealthSnapshot().camera.latest_identity.frame_number > 2U;
+    }));
     const std::string stop =
         "{\"schema_version\":1,\"request_id\":\"stop-001\",\"recording_id\":\"episode-0001-"
         "front\"}";
@@ -329,6 +346,22 @@ TEST(VisionApplication, RecordsThroughDirectHttpLifecycle) {
               http::status::accepted);
     EXPECT_EQ(requestResponse(port, http::verb::post, "/recordings/stop", stop).result(),
               http::status::ok);
+    const std::filesystem::path artifact = root.getPath() / "finalized" / "episode-0001-front";
+    EXPECT_TRUE(std::filesystem::is_regular_file(artifact / "color.mp4"));
+    EXPECT_TRUE(std::filesystem::is_regular_file(artifact / "frames.jsonl"));
+    EXPECT_TRUE(std::filesystem::is_regular_file(artifact / "recording_manifest.json"));
+    std::ifstream manifest_input(artifact / "recording_manifest.json");
+    const boost::json::object manifest =
+        boost::json::parse(std::string(std::istreambuf_iterator<char>(manifest_input),
+                                       std::istreambuf_iterator<char>()))
+            .as_object();
+    EXPECT_EQ(manifest.at("recording_id").as_string(), "episode-0001-front");
+    EXPECT_GT(manifest.at("submitted_frame_count").to_number<std::uint64_t>(), 0U);
+    const http::response<http::string_body> current =
+        requestResponse(port, http::verb::get, "/recordings/current");
+    EXPECT_EQ(current.result(), http::status::ok);
+    EXPECT_EQ(boost::json::parse(current.body()).as_object().at("artifact_reference").as_string(),
+              "finalized/episode-0001-front");
     application.stopApplication();
 }
 

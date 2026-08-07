@@ -26,4 +26,12 @@ TEST(RecordingContracts, PersistsOnlySafeCanonicalStartRequest) {
                  std::invalid_argument);
 }
 
+TEST(RecordingContracts, PreservesAcceptedCanonicalStartRequestBytes) {
+    const RecordingStartRequest request{
+        "start-001", "episode-0001-front",
+        "{\"schema_version\":1,\"request_id\":\"start-001\",\"recording_id\":\"episode-0001-"
+        "front\",\"expected_profile\":{}}"};
+    EXPECT_EQ(serializeRecordingStartRequest(request), request.canonical_json);
+}
+
 }  // namespace nodus_vision

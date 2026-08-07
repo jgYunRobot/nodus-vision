@@ -28,12 +28,36 @@ struct RecordingArtifactDigest {
     std::string sha256_hex;
 };
 
+/** @brief immutable finalized recording manifest의 typed metadata다. */
+struct FinalizedRecordingManifest {
+    std::string recording_id;
+    std::string component_id;
+    std::string instance_id;
+    std::string device_id;
+    std::string sensor_frame;
+    std::string calibration_id;
+    int width{0};
+    int height{0};
+    int fps{0};
+    std::int64_t started_monotonic_ns{0};
+    std::int64_t started_unix_epoch_ns{0};
+    std::int64_t stopped_monotonic_ns{0};
+    std::int64_t stopped_unix_epoch_ns{0};
+    std::uint64_t admitted_frame_count{0U};
+    std::uint64_t submitted_frame_count{0U};
+    std::uint64_t recording_drop_count{0U};
+    FrameIdentity first_frame;
+    FrameIdentity last_frame;
+    bool has_frames{false};
+    std::string start_request_id;
+    std::string stop_request_id;
+};
+
 /** @brief regular non-symlink file의 bounded SHA-256 metadata를 계산한다. */
 RecordingArtifactDigest calculateRecordingArtifactDigest(const std::filesystem::path& root,
                                                          const std::string& relative_path);
 /** @brief immutable finalized manifest를 compact JSON으로 serialize한다. */
-std::string serializeFinalizedRecordingManifest(const std::string& recording_id,
-                                                std::uint64_t submitted_frame_count,
+std::string serializeFinalizedRecordingManifest(const FinalizedRecordingManifest& manifest,
                                                 const RecordingArtifactDigest& video,
                                                 const RecordingArtifactDigest& sidecar);
 

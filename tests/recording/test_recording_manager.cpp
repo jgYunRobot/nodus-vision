@@ -2,11 +2,13 @@
 
 #include <gtest/gtest.h>
 
+#include <chrono>
 #include <cstdlib>
 #include <filesystem>
 #include <memory>
 #include <optional>
 #include <stdexcept>
+#include <thread>
 #include <vector>
 
 #include "recording_manager.hpp"
@@ -63,7 +65,28 @@ class RgbFrame final : public CapturedFrame, public std::enable_shared_from_this
 };
 
 RecordingManagerConfig makeConfig(const std::filesystem::path& root) {
-    return {root, 4U, 64, 64, 30, 100000, "front_optical", "front_v1"};
+    return {root,
+            4U,
+            64,
+            64,
+            30,
+            100000,
+            "front_optical",
+            "front_v1",
+            "camera.front",
+            "front_d435",
+            "vision-test-1"};
+}
+
+bool submitFrameEventually(RecordingManager& manager, std::uint64_t generation,
+                           std::uint64_t frame_number) {
+    for (int attempt = 0; attempt < 100; ++attempt) {
+        if (manager.trySubmitFrame(std::make_shared<RgbFrame>(generation, frame_number))) {
+            return true;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    return false;
 }
 
 }  // namespace
@@ -72,9 +95,10 @@ TEST(RecordingManager, DrainsImmutableRgbFramesIntoStagingArtifact) {
     TemporaryRecordingDirectory directory;
     RecordingManager manager(makeConfig(directory.getPath()));
     manager.start({"start-001", "episode-0001-front", ""});
-    EXPECT_TRUE(manager.trySubmitFrame(std::make_shared<RgbFrame>(1U, 1U)));
+    ASSERT_TRUE(submitFrameEventually(manager, 1U, 1U));
     EXPECT_TRUE(manager.trySubmitFrame(std::make_shared<RgbFrame>(1U, 2U)));
-    manager.finalize();
+    EXPECT_EQ(manager.finalizeOrReplay({"stop-001", "episode-0001-front", ""}),
+              RecordingStopResult::e_FINALIZED);
     const RecordingStatus status = manager.getStatus();
     EXPECT_EQ(status.state, RecordingState::e_FINALIZED);
     EXPECT_EQ(status.admitted_frame_count, 2U);
@@ -83,6 +107,7 @@ TEST(RecordingManager, DrainsImmutableRgbFramesIntoStagingArtifact) {
     EXPECT_TRUE(std::filesystem::is_regular_file(artifact / "color.mp4"));
     EXPECT_TRUE(std::filesystem::is_regular_file(artifact / "frames.jsonl"));
     EXPECT_TRUE(std::filesystem::is_regular_file(artifact / "recording_manifest.json"));
+    EXPECT_TRUE(std::filesystem::is_regular_file(artifact / "stop_request.json"));
 }
 
 TEST(RecordingManager, RejectsFrameWhenNotRecording) {
@@ -97,6 +122,8 @@ TEST(RecordingManager, ReplaysOnlyTheExactAcceptedStartRequest) {
     const RecordingStartRequest request{"start-001", "episode-0001-front", ""};
     EXPECT_EQ(manager.startOrReplay(request), RecordingStartResult::e_STARTED);
     EXPECT_EQ(manager.startOrReplay(request), RecordingStartResult::e_REPLAYED);
+    EXPECT_THROW(manager.startOrReplay({"start-001", "episode-0001-front", "{\"changed\":true}"}),
+                 std::runtime_error);
     EXPECT_THROW(manager.startOrReplay({"start-001", "different-id", ""}), std::runtime_error);
     manager.finalize();
     EXPECT_EQ(manager.startOrReplay(request), RecordingStartResult::e_REPLAYED);
@@ -106,8 +133,17 @@ TEST(RecordingManager, FaultsRatherThanMixingCaptureGenerations) {
     TemporaryRecordingDirectory directory;
     RecordingManager manager(makeConfig(directory.getPath()));
     manager.start({"start-001", "episode-0001-front", ""});
-    EXPECT_TRUE(manager.trySubmitFrame(std::make_shared<RgbFrame>(1U, 1U)));
-    EXPECT_TRUE(manager.trySubmitFrame(std::make_shared<RgbFrame>(2U, 1U)));
+    ASSERT_TRUE(submitFrameEventually(manager, 1U, 1U));
+    bool first_frame_submitted = false;
+    for (int attempt = 0; attempt < 100; ++attempt) {
+        if (manager.getStatus().submitted_frame_count == 1U) {
+            first_frame_submitted = true;
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    ASSERT_TRUE(first_frame_submitted);
+    ASSERT_TRUE(submitFrameEventually(manager, 2U, 1U));
     manager.finalize();
     EXPECT_EQ(manager.getStatus().state, RecordingState::e_FAULTED);
 }

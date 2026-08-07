@@ -5,6 +5,8 @@
 
 #include "vision_application.hpp"
 
+#include <unistd.h>
+
 #include <atomic>
 #include <boost/json.hpp>
 #include <chrono>
@@ -122,6 +124,22 @@ std::string makeRecordingCurrentJson(const RecordingStatus& status) {
     root["admitted_frame_count"] = status.admitted_frame_count;
     root["submitted_frame_count"] = status.submitted_frame_count;
     root["recording_drop_count"] = status.recording_drop_count;
+    root["started_monotonic_ns"] = status.started_monotonic_ns == 0
+                                       ? boost::json::value(nullptr)
+                                       : boost::json::value(status.started_monotonic_ns);
+    root["started_unix_epoch_ns"] = status.started_unix_epoch_ns == 0
+                                        ? boost::json::value(nullptr)
+                                        : boost::json::value(status.started_unix_epoch_ns);
+    root["stopped_monotonic_ns"] = status.stopped_monotonic_ns == 0
+                                       ? boost::json::value(nullptr)
+                                       : boost::json::value(status.stopped_monotonic_ns);
+    root["stopped_unix_epoch_ns"] = status.stopped_unix_epoch_ns == 0
+                                        ? boost::json::value(nullptr)
+                                        : boost::json::value(status.stopped_unix_epoch_ns);
+    root["artifact_reference"] = status.finalized_artifact_reference.empty()
+                                     ? boost::json::value(nullptr)
+                                     : boost::json::value(status.finalized_artifact_reference);
+    root["last_error"] = nullptr;
     return boost::json::serialize(root);
 }
 
@@ -197,7 +215,8 @@ bool isPixelRequestValid(const PixelRequest& request, const StreamProfile& profi
            request.y < profile.height;
 }
 
-std::string makeHealthJson(const ProviderHealthSnapshot& health) {
+std::string makeHealthJson(const ProviderHealthSnapshot& health, bool recording_enabled,
+                           const RecordingStatus* p_recording) {
     boost::json::object server;
     server["listening"] = health.listening;
     server["active_connections"] = health.active_connections;
@@ -234,6 +253,31 @@ std::string makeHealthJson(const ProviderHealthSnapshot& health) {
                               ? boost::json::value(nullptr)
                               : boost::json::value(health.pilot.last_error);
     root["pilot"] = std::move(pilot);
+    boost::json::object recording;
+    recording["enabled"] = recording_enabled;
+    if (p_recording == nullptr) {
+        recording["state"] = "disabled";
+        recording["recording_id"] = nullptr;
+        recording["queue_depth"] = 0;
+        recording["queue_capacity"] = 0;
+        recording["admitted_frame_count"] = 0;
+        recording["submitted_frame_count"] = 0;
+        recording["recording_drop_count"] = 0;
+        recording["orphan_staging_count"] = 0;
+    } else {
+        recording["state"] = toString(p_recording->state);
+        recording["recording_id"] = p_recording->recording_id.empty()
+                                        ? boost::json::value(nullptr)
+                                        : boost::json::value(p_recording->recording_id);
+        recording["queue_depth"] = p_recording->queue_depth;
+        recording["queue_capacity"] = p_recording->queue_capacity;
+        recording["admitted_frame_count"] = p_recording->admitted_frame_count;
+        recording["submitted_frame_count"] = p_recording->submitted_frame_count;
+        recording["recording_drop_count"] = p_recording->recording_drop_count;
+        recording["orphan_staging_count"] = p_recording->orphan_staging_count;
+    }
+    recording["last_error"] = nullptr;
+    root["recording"] = std::move(recording);
     root["last_error"] = health.last_error.empty() ? boost::json::value(nullptr)
                                                    : boost::json::value(health.last_error);
     return boost::json::serialize(root);
@@ -341,12 +385,20 @@ void VisionApplication::startApplication() {
             static_cast<std::size_t>(m_p_impl->m_config.recording.queue_capacity_frames),
             color_profile.width, color_profile.height, color_profile.fps,
             m_p_impl->m_config.recording.bit_rate_bps, m_p_impl->m_config.calibration.sensor_frame,
-            m_p_impl->m_config.calibration.calibration_id});
+            m_p_impl->m_config.calibration.calibration_id, m_p_impl->m_config.component_id,
+            m_p_impl->m_config.device_id, "vision-" + std::to_string(getpid())});
     }
     ProviderHttpRoutes routes;
     routes.get_health = [this]() {
-        return ProviderHttpResponse{
-            200, "application/json", makeHealthJson(getHealthSnapshot()), {}};
+        if (m_p_impl->m_p_recording_manager == nullptr) {
+            return ProviderHttpResponse{
+                200, "application/json", makeHealthJson(getHealthSnapshot(), false, nullptr), {}};
+        }
+        const RecordingStatus recording_status = m_p_impl->m_p_recording_manager->getStatus();
+        return ProviderHttpResponse{200,
+                                    "application/json",
+                                    makeHealthJson(getHealthSnapshot(), true, &recording_status),
+                                    {}};
     };
     routes.get_metadata = [this]() {
         return ProviderHttpResponse{
