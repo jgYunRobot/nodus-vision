@@ -1,5 +1,49 @@
 # Progress
 
+## 2026-08-08 - Phase 6 camera mount geometry design correction
+
+### Changes
+
+- Replaced the over-general Phase 6 source/target frame design with the PA-CONTROL camera mount
+  semantics: `mount_frame` selects a named dynamic Control/Pilot frame and
+  `mount_local_transform` describes the camera's fixed pose relative to that frame.
+- Removed `mount_link_id` from the migration contract because named frame lookup replaces the legacy
+  numeric parent-link registration path.
+- Defined one startup-normalized `T_mount_camera_optical` matrix that composes the local pose and
+  optical axis convention once. Consumers compose it with timestamp-matched
+  `T_root_mount(t_capture)` so a wrist-mounted camera moves with its mount frame.
+- Kept Provider config schema version 1, existing routes, and PCD1 v2 layout. The design no longer
+  proposes config v2, arbitrary output-frame selection, `/geometry`, or PCD1 v3.
+- Defined additive JSON mount-point metadata, use of the existing PCD1 v2 matrix3x4 slot, Pilot
+  metadata-only discovery, and Portal fixtures that detect static or dynamic double transforms.
+- Confirmed the existing migration source manifest already pins the exact PA-CONTROL revision and
+  includes camera runtime, camera manager/config, and legacy Portal point-cloud source paths.
+
+### Status
+
+- Phase 6 is design-ready after M6-0 contract review. No Phase 6 config, transform code, public
+  response, PCD matrix, Pilot descriptor, or Portal behavior has been activated.
+- Vision owns raw optical payloads and static camera-to-mount calibration. The consumer owns
+  capture-time mount-to-root composition from Pilot public RobotStatus frame data.
+- Multi-edge frame graphs, Vision-side RobotStatus polling, dynamic interpolation, hand-eye
+  calibration tooling, Phase 7 product integration, and physical hardware execution remain excluded.
+
+### Validation
+
+- Reviewed current Vision config/contracts, JSON query serializers, PCD1 v2 codec/schema, and the
+  pinned PA-CONTROL camera config, frame registration, RobotStatus frame matching,
+  `/reference_frame`, optical remap, and point-cloud transform implementation.
+- Reviewed the current Portal checkout and confirmed that no production camera/point-cloud consumer
+  has yet been migrated there.
+- Ran documentation diff checks only. Build and CTest were not run for this design-only change.
+
+### Next goals
+
+- Review M6-0 matrix direction, `mount_local_transform` Euler semantics, and PCD1 v2 matrix behavior
+  before implementation.
+- After approval, implement M6-1 through M6-6 in order and stop before Portal product integration or
+  hardware scope.
+
 ## 2026-08-08 - Phase 5 recording lifecycle review remediation
 
 ### Changes

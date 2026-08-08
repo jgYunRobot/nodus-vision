@@ -274,13 +274,16 @@ Vision config는 strict versioned JSON object로 둔다. unknown field는 거부
   "calibration": {
     "calibration_id": "top_d435_mount_v1",
     "sensor_frame": "top_d435_color_optical_frame",
-    "mount_frame": "top_d435_mount",
-    "camera_to_mount_matrix4x4": [
-      1, 0, 0, 0,
-      0, 1, 0, 0,
-      0, 0, 1, 0,
-      0, 0, 0, 1
-    ]
+    "mount_frame": "e_rob_wrist_cam",
+    "mount_local_transform": {
+      "x": 0.0,
+      "y": 0.0,
+      "z": 0.06,
+      "r1": 0.0,
+      "r2": 0.0,
+      "r3": 0.0,
+      "euler_type": "XYZ"
+    }
   },
   "provider": {
     "bind_host": "127.0.0.1",
@@ -304,7 +307,7 @@ Vision config는 strict versioned JSON object로 둔다. unknown field는 거부
 
 - `device_id`, `device_type/adapter`, `serial_number`
 - depth/color profile와 align
-- `calibration_id`, `mount_frame`, `sensor_frame`, mount transform
+- `calibration_id`, `sensor_frame`, `mount_frame`, `mount_local_transform`
 - bind host/port
 
 다음 field는 Vision config에서 제거한다.
@@ -314,6 +317,7 @@ Vision config는 strict versioned JSON object로 둔다. unknown field는 거부
 - `ui`: Portal preference 책임
 - `runtime_endpoint`: `advertised_base_url`에서 파생
 - arbitrary `extra_arguments`: strict typed config로 대체
+- `mount_link_id`: Control이 공개한 named frame을 사용하므로 legacy numeric link lookup 제거
 
 `bind_host=0.0.0.0`은 허용할 수 있지만 `advertised_base_url`에는 wildcard address를 허용하지 않는다.
 serial이 비어 있으면 hardware가 둘 이상인 환경에서 fail closed한다.
@@ -372,22 +376,27 @@ frame number만으로 process restart 전후 frame을 식별하지 않는다. co
 
 ## 10. 좌표계와 calibration
 
-Vision의 authoritative geometry는 camera optical frame이다.
+Vision adapter의 authoritative source geometry는 camera optical frame이다. `mount_frame`은 Control/Pilot
+RobotStatus에서 선택할 named frame이며 `mount_local_transform`은 그 frame에 대한 camera의 고정 부착
+pose다.
 
 ```text
 pixel + depth -> point_camera_optical
-point_camera_optical -> configured camera_to_mount
-mount -> robot base/world is a timestamped consumer composition
+point_mount = T_mount_camera_optical * point_camera_optical
+point_root(t) = T_root_mount(t) * point_mount
 ```
 
 기존 runtime의 mutable `/reference_frame`은 외부 robot pose가 camera payload 자체를 바꾸게 하므로
 target baseline으로 사용하지 않는다.
 
-- `camera_to_mount`는 versioned calibration artifact/config다.
+- `mount_local_transform`은 versioned calibration config이며 translation/Euler를 startup에서 canonical
+  `T_mount_camera_optical` matrix로 한 번 정규화한다.
+- PA-CONTROL의 `optical(x,y,z) -> body(x,z,-y)` convention은 canonical matrix에 한 번 합성한다.
 - point-cloud payload는 raw optical point와 transform metadata를 명확히 구분한다.
-- Portal rendering의 `optical(x,y,z) -> mount(x,z,-y)` helper는 Portal에 남긴다.
-- dynamic `mount -> base/world`는 camera timestamp에 맞는 RobotStatus/kinematics sample을 가진
+- Portal은 optical remap을 별도로 반복하지 않고 public matrix를 정확히 한 번 적용한다.
+- dynamic `mount_frame -> base/world`는 camera timestamp에 맞는 RobotStatus/kinematics sample을 가진
   consumer가 계산한다.
+- mount frame pose가 움직이면 같은 합성 chain을 사용하는 camera와 point cloud도 함께 움직인다.
 - Vision이 나중에 robot-frame query를 제공하려면 Pilot status sample contract, interpolation,
   maximum skew와 used-sample identity를 별도 설계한 뒤 추가한다.
 
@@ -648,15 +657,17 @@ diagnostic은 rate-limited DEBUG로 둔다.
 ### V6: calibration와 geometry contract
 
 - camera optical contract
-- versioned camera-to-mount calibration
+- named dynamic `mount_frame`과 versioned static `mount_local_transform`
+- legacy `mount_link_id` 제거와 canonical camera-to-mount matrix
 - point-cloud transform metadata
-- Portal optical conversion fixture
+- Portal static/dynamic transform composition fixture
 - robot-frame transform consumer handoff
 
 완료 조건:
 
-- raw optical point와 transformed point schema가 섞이지 않는다.
-- calibration id/matrix/frame id가 모든 spatial response에 있다.
+- raw optical point와 static mount point schema가 섞이지 않는다.
+- calibration id, sensor/mount frame과 matrix가 모든 spatial response에 있다.
+- mount frame pose가 변하면 consumer fixture의 camera pose도 함께 변한다.
 - mutable latest robot pose를 Vision에 push하지 않는다.
 
 ### V7: product integrations
