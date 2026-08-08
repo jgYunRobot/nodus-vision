@@ -204,6 +204,10 @@ TEST(ProviderHttpServer, PreservesRoutePayloadHeadersAndNoStoreResponses) {
         requestResponse(server.getBoundPort(), http::verb::get, "/snapshot/color");
     EXPECT_EQ(snapshot.result(), http::status::service_unavailable);
     EXPECT_EQ(snapshot[http::field::cache_control], "no-store");
+    const http::response<http::string_body> depth_snapshot =
+        requestResponse(server.getBoundPort(), http::verb::get, "/snapshot/depth");
+    EXPECT_EQ(depth_snapshot.result(), http::status::service_unavailable);
+    EXPECT_EQ(depth_snapshot[http::field::cache_control], "no-store");
 
     const http::response<http::string_body> recording_start =
         requestResponse(server.getBoundPort(), http::verb::post, "/recordings/start",
@@ -223,7 +227,7 @@ TEST(ProviderHttpServer, StreamsLatestFrameAndBoundsSlowClients) {
     server.startServer();
 
     StreamClient first_client(server.getBoundPort());
-    const std::string stream_header = first_client.openStream("/stream/color.mjpg");
+    const std::string stream_header = first_client.openStream("/stream/depth.mjpg");
     EXPECT_NE(stream_header.find("200 OK"), std::string::npos);
     EXPECT_NE(stream_header.find("multipart/x-mixed-replace"), std::string::npos);
     const std::string first_part = first_client.readPart();
@@ -231,13 +235,13 @@ TEST(ProviderHttpServer, StreamsLatestFrameAndBoundsSlowClients) {
     ASSERT_TRUE(waitForStreamCount(server, 1));
 
     const http::response<http::string_body> rejected_stream =
-        requestResponse(server.getBoundPort(), http::verb::get, "/stream/depth.mjpg");
+        requestResponse(server.getBoundPort(), http::verb::get, "/stream/color.mjpg");
     EXPECT_EQ(rejected_stream.result(), http::status::too_many_requests);
     EXPECT_EQ(server.getActiveStreamClientCount(), 1);
 
     std::atomic_store(&current_stream_frame, makeStreamFrame(100U, 1024U));
     for (int notification = 0; notification < 100; ++notification) {
-        server.notifyStreamFrame(ProviderStreamKind::e_COLOR);
+        server.notifyStreamFrame(ProviderStreamKind::e_DEPTH);
     }
     const std::string latest_part = first_client.readPart();
     EXPECT_NE(latest_part.find("X-Nodus-Frame-Number: 100"), std::string::npos);

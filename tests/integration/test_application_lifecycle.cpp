@@ -103,6 +103,19 @@ http::response<http::string_body> waitForColorSnapshot(int port) {
     return response;
 }
 
+http::response<http::string_body> waitForDepthSnapshot(int port) {
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(500);
+    http::response<http::string_body> response;
+    while (std::chrono::steady_clock::now() < deadline) {
+        response = requestResponse(port, http::verb::get, "/snapshot/depth");
+        if (response.result() == http::status::ok) {
+            return response;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+    return response;
+}
+
 class RestartableFakePilot {
    public:
     ~RestartableFakePilot() { stopServer(); }
@@ -216,9 +229,19 @@ TEST(VisionApplication, ServesFakeDataPlaneAndRestartsCleanly) {
     EXPECT_EQ(snapshot["X-Nodus-Mount-Frame"], "fake_mount");
     EXPECT_EQ(snapshot["X-Nodus-Calibration-Id"], "fake_calibration");
 
+    const http::response<http::string_body> depth_snapshot = waitForDepthSnapshot(first_port);
+    ASSERT_EQ(depth_snapshot.result(), http::status::ok);
+    EXPECT_EQ(depth_snapshot[http::field::content_type], "image/jpeg");
+    EXPECT_FALSE(depth_snapshot["X-Nodus-Frame-Number"].empty());
+    EXPECT_EQ(depth_snapshot["X-Nodus-Sensor-Frame"], "fake_optical");
+    EXPECT_EQ(depth_snapshot["X-Nodus-Mount-Frame"], "fake_mount");
+    EXPECT_EQ(depth_snapshot["X-Nodus-Calibration-Id"], "fake_calibration");
+
     const http::response<http::string_body> metadata =
         requestResponse(first_port, http::verb::get, "/metadata");
     EXPECT_NE(metadata.body().find("/stream/color.mjpg"), std::string::npos);
+    EXPECT_NE(metadata.body().find("/stream/depth.mjpg"), std::string::npos);
+    EXPECT_NE(metadata.body().find("/snapshot/depth"), std::string::npos);
     EXPECT_NE(metadata.body().find("/query/roi_depth"), std::string::npos);
     const boost::json::object metadata_json = boost::json::parse(metadata.body()).as_object();
     EXPECT_EQ(metadata_json.at("api_version"), "1.3.0");

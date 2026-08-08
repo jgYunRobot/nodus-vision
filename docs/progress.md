@@ -1,5 +1,32 @@
 # Progress
 
+## 2026-08-09 - D435 Depth preview hardware-independent regression
+
+### Changes
+
+- Added a fake-camera Depth preview JPEG regression that verifies RGB8, original frame identity,
+  owner retention, and decoded 4x3 image dimensions.
+- Added fake application snapshot coverage for `/snapshot/depth` and its established identity
+  headers, plus metadata coverage for both Depth preview endpoints.
+- Exercised `/stream/depth.mjpg` through the bounded latest-only stream session and preserved the
+  D435 catalog behavior that omits only Color descriptors when Color is disabled.
+
+### Status
+
+- DP2 is complete. Tests changed only Vision test sources; no Pilot implementation, Portal, public
+  schema/version, or endpoint catalog implementation changed.
+
+### Validation
+
+- `./make_full.sh --build-type Debug --build-only` completed, including local Debug install.
+- `ctest --test-dir build/debug --output-on-failure` passed: 25/25 hardware-independent tests.
+- The required clang-format 18.1.8 binary is not installed; the host provides clang-format 18.1.3.
+  `git diff --check` passes for task-owned changes.
+
+### Next goals
+
+- Commit DP2 test coverage, then perform DP3 only on the approved D435 execution boundary.
+
 ## 2026-08-09 - D435 immutable Depth preview frame
 
 ### Changes

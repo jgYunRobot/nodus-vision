@@ -33,6 +33,30 @@ TEST(JpegEncoder, EncodesDeterministicFakeRgbFrame) {
     jpeg_destroy_decompress(&decoder);
 }
 
+TEST(JpegEncoder, EncodesDeterministicFakeDepthPreview) {
+    FakeCameraAdapter adapter({4, 3, 30, 1U, 7U, true, false, false, "fake"});
+    adapter.connectCamera();
+    adapter.startStream();
+    const std::shared_ptr<const CapturedFrame> frame =
+        adapter.readFrame(std::chrono::milliseconds(1));
+    const std::optional<VideoFrameView> view = frame->getDepthPreviewFrameView();
+    ASSERT_TRUE(view.has_value());
+    EXPECT_EQ(view->format, PixelFormat::e_RGB8);
+    EXPECT_EQ(view->identity.frame_number, frame->getSnapshot().identity.frame_number);
+    EXPECT_NE(view->owner, nullptr);
+    const std::vector<std::uint8_t> jpeg = encodeRgbJpeg(*view, 90);
+    ASSERT_GT(jpeg.size(), 4U);
+    jpeg_decompress_struct decoder{};
+    jpeg_error_mgr error{};
+    decoder.err = jpeg_std_error(&error);
+    jpeg_create_decompress(&decoder);
+    jpeg_mem_src(&decoder, jpeg.data(), jpeg.size());
+    ASSERT_EQ(jpeg_read_header(&decoder, TRUE), JPEG_HEADER_OK);
+    EXPECT_EQ(decoder.image_width, 4U);
+    EXPECT_EQ(decoder.image_height, 3U);
+    jpeg_destroy_decompress(&decoder);
+}
+
 TEST(JpegEncoder, RejectsInvalidStrideAndQuality) {
     std::vector<std::uint8_t> pixels(12U, 0U);
     VideoFrameView view;

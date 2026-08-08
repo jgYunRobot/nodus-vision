@@ -66,6 +66,10 @@ TEST(VisionEndpointCatalog, OmitsOnlyColorDescriptorsWhenColorIsDisabled) {
         EXPECT_NE(descriptor.descriptor_id, "color-preview");
         EXPECT_NE(descriptor.descriptor_id, "color-snapshot");
     }
+    EXPECT_EQ(catalog.descriptors.at(0).descriptor_id, "depth-preview");
+    EXPECT_EQ(catalog.descriptors.at(0).endpoint, "http://127.0.0.1:8900/stream/depth.mjpg");
+    EXPECT_EQ(catalog.descriptors.at(1).descriptor_id, "depth-snapshot");
+    EXPECT_EQ(catalog.descriptors.at(1).endpoint, "http://127.0.0.1:8900/snapshot/depth");
 }
 
 TEST(VisionEndpointCatalog, AddsOnlyDirectRecordingServicesWhenEnabled) {
