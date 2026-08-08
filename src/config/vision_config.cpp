@@ -55,6 +55,22 @@ std::string requireString(const boost::json::object& object, const char* key, co
     return parsed;
 }
 
+std::string requireStringAllowEmpty(const boost::json::object& object, const char* key,
+                                    const char* path) {
+    const boost::json::value& value = requireField(object, key, path);
+    if (!value.is_string() || value.as_string().size() > 128U) {
+        throw std::invalid_argument(std::string(path) + ": must be a bounded string.");
+    }
+    const std::string parsed(value.as_string());
+    for (const unsigned char character : parsed) {
+        if (character < 0x20U || character == 0x7FU) {
+            throw std::invalid_argument(std::string(path) +
+                                        ": must not contain control characters.");
+        }
+    }
+    return parsed;
+}
+
 int requireBoundedInt(const boost::json::object& object, const char* key, const char* path,
                       int minimum, int maximum) {
     const boost::json::value& value = requireField(object, key, path);
@@ -238,7 +254,7 @@ VisionConfig parseVisionConfig(const std::string& json_text) {
              "color_height", "color_fps", "enable_color", "depth_min_m", "depth_max_m"},
             "/device/intel_d435");
         config.intel_d435.serial_number =
-            requireString(d435, "serial_number", "/device/intel_d435/serial_number");
+            requireStringAllowEmpty(d435, "serial_number", "/device/intel_d435/serial_number");
         config.intel_d435.depth_width =
             requireBoundedInt(d435, "depth_width", "/device/intel_d435/depth_width", 1, 4096);
         config.intel_d435.depth_height =
@@ -319,8 +335,8 @@ VisionConfig parseVisionConfig(const std::string& json_text) {
     config.provider.max_stream_clients =
         requireBoundedInt(provider, "max_stream_clients", "/provider/max_stream_clients", 1,
                           config.provider.max_connections);
-    config.provider.request_timeout_ms =
-        requireBoundedInt(provider, "request_timeout_ms", "/provider/request_timeout_ms", 1, 60000);
+    config.provider.request_timeout_ms = requireBoundedInt(
+        provider, "request_timeout_ms", "/provider/request_timeout_ms", 1000, 60000);
     config.provider.max_header_bytes =
         requireBoundedInt(provider, "max_header_bytes", "/provider/max_header_bytes", 1, 1048576);
     config.provider.max_body_bytes =
@@ -356,9 +372,9 @@ VisionConfig parseVisionConfig(const std::string& json_text) {
         throw std::invalid_argument("/pilot/clock_domain: only monotonic_same_host is supported.");
     }
     config.pilot.connect_timeout_ms =
-        requireBoundedInt(pilot, "connect_timeout_ms", "/pilot/connect_timeout_ms", 1, 60000);
+        requireBoundedInt(pilot, "connect_timeout_ms", "/pilot/connect_timeout_ms", 1000, 60000);
     config.pilot.request_timeout_ms =
-        requireBoundedInt(pilot, "request_timeout_ms", "/pilot/request_timeout_ms", 1, 60000);
+        requireBoundedInt(pilot, "request_timeout_ms", "/pilot/request_timeout_ms", 1000, 60000);
     config.pilot.max_response_bytes =
         requireBoundedInt(pilot, "max_response_bytes", "/pilot/max_response_bytes", 1, 10485760);
     config.pilot.retry_initial_delay_ms = requireBoundedInt(
@@ -366,7 +382,7 @@ VisionConfig parseVisionConfig(const std::string& json_text) {
     config.pilot.retry_max_delay_ms =
         requireBoundedInt(pilot, "retry_max_delay_ms", "/pilot/retry_max_delay_ms", 1, 60000);
     config.pilot.shutdown_timeout_ms =
-        requireBoundedInt(pilot, "shutdown_timeout_ms", "/pilot/shutdown_timeout_ms", 1, 60000);
+        requireBoundedInt(pilot, "shutdown_timeout_ms", "/pilot/shutdown_timeout_ms", 1000, 60000);
     if (config.pilot.retry_initial_delay_ms > config.pilot.retry_max_delay_ms) {
         throw std::invalid_argument(
             "/pilot/retry_initial_delay_ms: must not exceed /pilot/retry_max_delay_ms.");
@@ -394,7 +410,7 @@ VisionConfig parseVisionConfig(const std::string& json_text) {
     config.recording.minimum_free_bytes = requireBoundedUint64(
         recording, "minimum_free_bytes", "/recording/minimum_free_bytes", 1U, 1099511627776ULL);
     config.recording.finalize_timeout_ms = requireBoundedInt(
-        recording, "finalize_timeout_ms", "/recording/finalize_timeout_ms", 1, 600000);
+        recording, "finalize_timeout_ms", "/recording/finalize_timeout_ms", 1000, 600000);
     config.recording.bit_rate_bps =
         requireBoundedInt(recording, "bit_rate_bps", "/recording/bit_rate_bps", 1, 100000000);
     config.recording.preset = requireString(recording, "preset", "/recording/preset");

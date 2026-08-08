@@ -1,5 +1,31 @@
 # Progress
 
+## 2026-08-09 - Camera stream capacity and capture wait correction
+
+### Changes
+
+- Raised every shipped example Provider stream-client limit from 4 to 8, allowing four Portal
+  viewers when each consumes one Color and one Depth MJPEG stream.
+- Restored the runtime Camera capture wait from 5000 ms to 100 ms. The earlier long wait did not
+  resolve the observed D435 failure; a Camera hardware reset resolved the underlying USB/UVC fault.
+- Reviewed Vision tests for deployment-config coupling. Tests use in-memory parser inputs or
+  test-owned fixtures and do not load values from `assets/configs/examples/*.json`.
+
+### Status
+
+- Provider/Pilot HTTP failure timeouts remain independently bounded at 1000 ms or more. Only the
+  Camera frame wait returns to 100 ms.
+
+### Validation
+
+- Build, CTest, and physical Camera execution were not run because they were not explicitly
+  requested.
+
+### Next goals
+
+- Run the D435 and Portal together to confirm automatic preview recovery and the eight-client
+  capacity under the intended browser count.
+
 ## 2026-08-09 - Physical D435 Depth preview acceptance
 
 ### Changes

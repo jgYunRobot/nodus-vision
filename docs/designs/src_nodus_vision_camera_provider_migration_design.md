@@ -291,7 +291,7 @@ Vision config는 strict versioned JSON object로 둔다. unknown field는 거부
     "advertised_base_url": "http://127.0.0.1:8902",
     "allowed_origins": [],
     "max_connections": 32,
-    "max_stream_clients": 4
+    "max_stream_clients": 8
   },
   "pilot": {
     "base_url": "http://127.0.0.1:8765",
@@ -695,6 +695,30 @@ diagnostic은 rate-limited DEBUG로 둔다.
 - two-camera USB root-hub/bandwidth diagnostic
 
 hardware 실행은 별도 사용자 승인 후에만 수행한다.
+
+#### V8-0 single D435 trusted-LAN bring-up
+
+승인된 최초 실물 검증은 다음과 같이 범위를 고정한다.
+
+- model: Intel RealSense D435 (`8086:0b07`)
+- observed librealsense camera serial: `241222076339` (udev USB identity separately reports
+  `234423028813`)
+- selector: the example leaves `serial_number` empty and accepts only one name-matching D435;
+  multiple matches fail closed
+- host boundary: local USB 3 device access, local Pilot `127.0.0.1:8765`, trusted-LAN Provider
+  `192.168.219.106:8902`
+- configured streams: Depth Z16 640x480@30 and Color RGB8 640x480@30
+- capture timeout: 100 ms; the observed 5000 ms failures were caused by a USB/UVC fault that
+  required a Camera hardware reset, not by the normal frame wait bound
+- configured Provider/Pilot/recording failure timeouts remain at least 1000 ms
+- migrated identity: PA-CONTROL `top_d435`, `top_d435_mount`, and its existing static local transform
+- calibration status: `unconfigured`; hardware bring-up does not claim extrinsic calibration
+- exact command: `./run_app.sh --config assets/configs/examples/intel_d435_pilot.json`
+
+첫 acceptance는 process start, exact device selection, frame advance, `/health`, `/metadata`, Color
+snapshot/stream, Pilot catalog, and Portal Color preview를 확인했다. 후속 DP acceptance에서 D435
+Depth RGB preview snapshot/MJPEG와 Portal Depth card의 frame 진행까지 확인했다. Full ROI statistics,
+populated PCD1, recording, disconnect recovery, and two-camera bandwidth는 후속 V8 checkpoints다.
 
 ## 17. validation matrix
 

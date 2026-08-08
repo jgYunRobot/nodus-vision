@@ -138,7 +138,7 @@ Pilot integration example을 별도 추가한다.
     "enabled": true,
     "base_url": "http://127.0.0.1:8765",
     "clock_domain": "monotonic_same_host",
-    "connect_timeout_ms": 500,
+    "connect_timeout_ms": 1000,
     "request_timeout_ms": 1000,
     "max_response_bytes": 65536,
     "retry_initial_delay_ms": 100,
@@ -147,6 +147,9 @@ Pilot integration example을 별도 추가한다.
   }
 }
 ```
+
+Provider/Pilot/recording 실패 판정 timeout은 최소 1000 ms로 제한한다. Heartbeat/retry delay와
+internal wake interval은 실패 timeout이 아니므로 별도 bounded cadence를 유지한다.
 
 검증 규칙은 다음과 같다.
 

@@ -332,6 +332,9 @@ PA-CONTROL의 `modules/vision/intel_d435`에서 다음 behavior를 재구현한�
 
 - serial/device name selection과 ambiguous-device fail-closed
 - depth/color profile, align target, depth range validation
+- capture wait는 100 ms로 유지한다. V8 D435 bring-up에서 관측된 5000 ms frame wait 실패는
+  USB/UVC fault였고 Camera hardware reset으로 복구되었으므로 정상 capture cadence에 긴 wait를
+  유지하는 근거로 사용하지 않는다.
 - pipeline/config/frame RAII
 - blocking frame read와 immutable per-frame SDK ownership
 - frame/profile/intrinsics/depth scale snapshot
@@ -401,7 +404,10 @@ Phase 2 config에서는 `pilot`과 `recording` section을 받지 않는다. 해�
 - `advertised_base_url`은 absolute HTTP URL이며 wildcard host를 금지한다.
 - `bind_host`는 wildcard를 허용하되 advertise 값과 동일시하지 않는다.
 - `allowed_origins`는 exact HTTP origin만 허용하고 omitted/empty면 browser CORS를 비활성화한다.
-- adapter가 `intel_d435`이고 serial이 비어 있으면 multi-device ambiguity를 허용하지 않는다.
+- Provider/Pilot/recording의 실패 판정 timeout은 최소 1000 ms다. Retry delay와 encoder wake
+  interval은 timeout 계약이 아니므로 이 하한의 대상이 아니다.
+- adapter가 `intel_d435`이고 serial이 비어 있으면 이름이 일치하는 D435가 정확히 한 대일 때만
+  선택하며 multi-device ambiguity를 허용하지 않는다.
 - static matrix는 finite 16-element array이며 calibration identity를 동반한다.
 
 config error는 JSON pointer/path와 이유를 포함하고 process 시작 전에 fail closed한다.
@@ -599,7 +605,8 @@ contract로 만들지 않는다.
 
 ### 11.4 MJPEG backpressure
 
-- `max_stream_clients`는 일반 connection bound 안에서 별도로 제한한다.
+- `max_stream_clients`는 일반 connection bound 안에서 별도로 제한하며 현재 예제 배포는 Color와
+  Depth를 함께 보는 Portal client 네 개까지 허용하도록 8로 둔다.
 - client session은 마지막으로 보낸 frame identity만 기억한다.
 - 새 frame이 없으면 busy loop하지 않고 notification/deadline을 기다린다.
 - client socket이 느리면 해당 client는 intermediate frame을 drop하고 latest만 전송한다.

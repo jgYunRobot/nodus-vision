@@ -82,8 +82,21 @@ matching Portal development origins. Update the concrete advertised host and exa
 The integration has no TLS/authentication or physical-camera acceptance claim. Phase 6 geometry
 and product integrations remain separate work.
 
-No physical D435 acceptance has been performed. Starting an Intel D435 config requires an explicit
-hardware validation task and device-access approval.
+The hardware-specific `assets/configs/examples/intel_d435_pilot.json` selects exactly one
+name-matching D435 without requiring a serial and migrates the PA-CONTROL `top_d435` 640x480@30
+profile to provider port 8902. Run it only on the recorded research host after confirming the
+device count and LAN address:
+
+```bash
+./run_app.sh --config assets/configs/examples/intel_d435_pilot.json
+```
+
+A limited physical D435 acceptance was performed on the recorded research host with one Intel
+RealSense D435, librealsense serial `241222076339`, and the 640x480@30 Color/Depth profile. Vision
+Color capture, Pilot publication, trusted-LAN CORS, and Portal-compatible JPEG delivery passed after
+recovering a transient USB UVC `EPROTO` state with a Camera hardware reset. Depth preview, spatial
+preview snapshot/MJPEG delivery, and Portal presentation were subsequently accepted. Spatial
+queries/PCD content, recording, reconnect, and extrinsic calibration are not yet hardware-accepted.
 
 See
 `docs/designs/src_nodus_vision_camera_provider_migration_design.md` for the PA-CONTROL inventory,
