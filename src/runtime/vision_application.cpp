@@ -594,7 +594,7 @@ void VisionApplication::startApplication() {
         m_p_impl->m_config.provider.max_connections, m_p_impl->m_config.provider.max_stream_clients,
         m_p_impl->m_config.provider.request_timeout_ms,
         m_p_impl->m_config.provider.max_header_bytes, m_p_impl->m_config.provider.max_body_bytes,
-        std::move(routes));
+        m_p_impl->m_config.provider.allowed_origins, std::move(routes));
     m_p_impl->m_p_server->startServer();
     m_p_impl->m_health.listening = true;
     m_p_impl->m_started = true;

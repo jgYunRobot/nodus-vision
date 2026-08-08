@@ -13,23 +13,48 @@ constexpr const char* VALID_CONFIG = R"json({
   "component_id": "camera.fake_top",
   "device": {"adapter": "fake", "fake": {"width": 4, "height": 3, "fps": 30, "start_frame_number": 1, "pattern_seed": 7}},
   "calibration": {"calibration_id": "fake_v1", "sensor_frame": "fake_optical", "mount_frame": "fake_mount", "mount_local_transform": {"x": 0.0, "y": 0.0, "z": 0.06, "r1": 0.0, "r2": 0.0, "r3": 0.0, "euler_type": "XYZ"}},
-  "provider": {"bind_host": "127.0.0.1", "port": 0, "advertised_base_url": "http://127.0.0.1:8900", "max_connections": 4, "max_stream_clients": 2, "request_timeout_ms": 1000, "max_header_bytes": 8192, "max_body_bytes": 4096, "max_frame_age_ms": 1000},
+  "provider": {"bind_host": "127.0.0.1", "port": 0, "advertised_base_url": "http://127.0.0.1:8900", "max_connections": 4, "max_stream_clients": 2, "request_timeout_ms": 1000, "max_header_bytes": 8192, "max_body_bytes": 4096, "max_frame_age_ms": 1000, "allowed_origins": []},
   "pilot": {"enabled": false, "base_url": "http://127.0.0.1:8765", "clock_domain": "monotonic_same_host", "connect_timeout_ms": 500, "request_timeout_ms": 1000, "max_response_bytes": 65536, "retry_initial_delay_ms": 100, "retry_max_delay_ms": 5000, "shutdown_timeout_ms": 1500},
   "recording": {"enabled": false, "root": "/tmp/nodus-vision-test-recordings", "queue_capacity_frames": 120, "max_duration_ms": 600000, "minimum_free_bytes": 1073741824, "finalize_timeout_ms": 10000, "bit_rate_bps": 8000000, "preset": "veryfast", "tune": "zerolatency"}
 })json";
 
+std::string makeValidConfig() {
+    std::string input = VALID_CONFIG;
+    input.replace(input.find("\"port\": 0"), std::string("\"port\": 0").size(), "\"port\": 8900");
+    return input;
+}
+
 }  // namespace
 
 TEST(VisionConfig, ParsesStrictFakeProviderConfig) {
-    std::string input = VALID_CONFIG;
-    input.replace(input.find("\"port\": 0"), std::string("\"port\": 0").size(), "\"port\": 8900");
+    const std::string input = makeValidConfig();
     const VisionConfig config = parseVisionConfig(input);
     EXPECT_EQ(config.adapter, "fake");
     EXPECT_EQ(config.fake.width, 4);
     EXPECT_EQ(config.provider.port, 8900);
     EXPECT_EQ(config.calibration.mount_local_transform.z, 0.06);
     EXPECT_EQ(config.calibration.mount_local_transform.euler_type, "XYZ");
+    EXPECT_TRUE(config.provider.allowed_origins.empty());
     EXPECT_FALSE(config.recording.enabled);
+}
+
+TEST(VisionConfig, ParsesExactLanBrowserOrigins) {
+    std::string input = makeValidConfig();
+    input.replace(input.find("\"allowed_origins\": []"), 21U,
+                  "\"allowed_origins\": [\"http://localhost:5173\", "
+                  "\"http://192.168.219.106:5173\"]");
+    const VisionConfig config = parseVisionConfig(input);
+    ASSERT_EQ(config.provider.allowed_origins.size(), 2U);
+    EXPECT_EQ(config.provider.allowed_origins.at(0), "http://localhost:5173");
+    EXPECT_EQ(config.provider.allowed_origins.at(1), "http://192.168.219.106:5173");
+}
+
+TEST(VisionConfig, DefaultsOmittedBrowserOriginsToDisabled) {
+    std::string input = makeValidConfig();
+    const std::string allowed_origins_field = ", \"allowed_origins\": []";
+    input.erase(input.find(allowed_origins_field), allowed_origins_field.size());
+    const VisionConfig config = parseVisionConfig(input);
+    EXPECT_TRUE(config.provider.allowed_origins.empty());
 }
 
 TEST(VisionConfig, RejectsUnknownAndWildcardAdvertiseFields) {
@@ -52,6 +77,23 @@ TEST(VisionConfig, RejectsInactiveAdapterAndHeaderControlCharacters) {
     control_character.replace(control_character.find("camera.fake_top"),
                               std::string("camera.fake_top").size(), "camera.fake_top\\ninvalid");
     EXPECT_THROW(parseVisionConfig(control_character), std::invalid_argument);
+}
+
+TEST(VisionConfig, RejectsUnsafeBrowserOrigins) {
+    std::string wildcard = makeValidConfig();
+    wildcard.replace(wildcard.find("\"allowed_origins\": []"), 21U, "\"allowed_origins\": [\"*\"]");
+    EXPECT_THROW(parseVisionConfig(wildcard), std::invalid_argument);
+
+    std::string path = makeValidConfig();
+    path.replace(path.find("\"allowed_origins\": []"), 21U,
+                 "\"allowed_origins\": [\"http://localhost:5173/path\"]");
+    EXPECT_THROW(parseVisionConfig(path), std::invalid_argument);
+
+    std::string duplicate = makeValidConfig();
+    duplicate.replace(duplicate.find("\"allowed_origins\": []"), 21U,
+                      "\"allowed_origins\": [\"http://localhost:5173\", "
+                      "\"http://localhost:5173\"]");
+    EXPECT_THROW(parseVisionConfig(duplicate), std::invalid_argument);
 }
 
 TEST(VisionConfig, RejectsInvalidPilotConfiguration) {

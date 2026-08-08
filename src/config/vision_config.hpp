@@ -8,6 +8,7 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 #include "fake_camera_adapter.hpp"
 #include "intel_d435_adapter.hpp"
@@ -25,6 +26,7 @@ struct ProviderConfig {
     int max_header_bytes{0};
     int max_body_bytes{0};
     int max_frame_age_ms{0};
+    std::vector<std::string> allowed_origins;
 };
 
 /** @brief Pilot public lifecycle client의 strict runtime bounds다. */

@@ -1,5 +1,97 @@
 # Progress
 
+## 2026-08-08 - Application run helper
+
+### Changes
+
+- Added executable `run_app.sh` with the Pilot-enabled fake Camera profile as its default.
+- Reused `make_full.sh` to optionally rebuild the selected Debug or Release preset before launching
+  the matching binary.
+- Added explicit config, build type, job count, and opt-in `--build` controls with path and
+  argument validation.
+
+### Status
+
+- `./run_app.sh` now provides the normal fake Camera plus Pilot and trusted-LAN launch path without
+  rebuilding by default; `--build` explicitly refreshes the selected binary first.
+- The previously observed `/provider/allowed_origins: unknown field` error came from running an
+  older Debug binary against the updated configuration and requires one `./run_app.sh --build`
+  execution after the configuration-contract change.
+
+### Validation
+
+- `bash -n run_app.sh`, the help path, and `git diff --check` passed.
+- The build, CTest, application, Pilot, and physical Camera were not run as part of this helper
+  addition.
+
+### Next goals
+
+- Run `./run_app.sh`, then verify the Vision registration and advertised Color/Depth endpoints
+  through Pilot and Portal on the trusted LAN.
+
+## 2026-08-08 - Trusted-LAN browser access
+
+### Changes
+
+- Added an optional strict `provider.allowed_origins` configuration with a bounded unique exact-
+  origin allowlist. Omitted or empty configuration keeps cross-origin browser access disabled.
+- Added exact-origin CORS headers to normal, error, and MJPEG responses, bounded `OPTIONS`
+  preflight responses, and fail-closed rejection for unlisted browser origins.
+- Kept native clients without an `Origin` header compatible and retained Vision-owned direct
+  payload delivery without adding a Pilot or Portal proxy.
+- Updated the Pilot-enabled fake configuration to bind on `0.0.0.0`, advertise
+  `http://192.168.219.106:8900`, and allow the matching localhost/LAN Portal development origins.
+- Documented the trusted-LAN boundary and added config/provider regression fixtures without
+  running a physical Camera or modifying Portal/Pilot repositories.
+
+### Status
+
+- Vision now has the configuration and HTTP behavior needed for a Portal browser on the same LAN
+  to fetch health/metadata and open color/depth previews from the advertised provider address.
+- This remains a private research-LAN profile with no authentication, TLS, Internet exposure, or
+  camera privacy hardening claim.
+- Pre-existing `make_full.sh` and its progress entry remain preserved and uncommitted.
+
+### Validation
+
+- Exact clang-format 18.1.8 formatting and dry-run checks passed for the owned C++ files.
+- `jq empty` passed for the config schema and both fake example configs; `git diff --check` passed.
+- Build and test commands were not run because repository rules require explicit user instruction.
+
+### Next goals
+
+- Rebuild Vision when explicitly requested, restart the fake provider with
+  `assets/configs/examples/fake_camera_pilot.json`, and verify the advertised endpoint and CORS
+  headers from the tablet Portal origin.
+
+## 2026-08-08 - Full build helper
+
+### Changes
+
+- Added executable `make_full.sh` as the root entry point for dependency setup, CMake preset
+  configuration, parallel build, and preset-local installation.
+- Kept Debug and Release selection aligned with the existing CMake presets and added bounded
+  command-line validation for jobs, clean, configure-only, and build-only modes.
+- Used CMake's portable directory removal for clean builds and rejected the contradictory
+  `--clean --build-only` combination.
+
+### Status
+
+- A default invocation builds and installs the Release preset under `build/release` and
+  `install/release`; Debug uses the matching existing preset directories.
+- The helper does not run CTest or access a physical Camera.
+
+### Validation
+
+- `bash -n make_full.sh` and the help path were checked.
+- The build and test suites were not run because repository rules require an explicit request.
+
+### Next goals
+
+- Use `./make_full.sh` for a complete Release build, or select Debug and job count through its
+  documented options.
+- Run CTest separately when test execution is explicitly requested.
+
 ## 2026-08-08 - Phase 6 review findings 1-3 remediation
 
 ### Changes

@@ -289,6 +289,7 @@ Vision config는 strict versioned JSON object로 둔다. unknown field는 거부
     "bind_host": "127.0.0.1",
     "port": 8902,
     "advertised_base_url": "http://127.0.0.1:8902",
+    "allowed_origins": [],
     "max_connections": 32,
     "max_stream_clients": 4
   },
@@ -309,6 +310,7 @@ Vision config는 strict versioned JSON object로 둔다. unknown field는 거부
 - depth/color profile와 align
 - `calibration_id`, `sensor_frame`, `mount_frame`, `mount_local_transform`
 - bind host/port
+- exact browser `allowed_origins`; omitted or empty means cross-origin browser access disabled
 
 다음 field는 Vision config에서 제거한다.
 

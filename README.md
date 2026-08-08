@@ -55,6 +55,16 @@ Run with the deterministic fake camera:
 ./build/debug/app/nodus-vision assets/configs/examples/fake_camera.json
 ```
 
+Build and run the Pilot-enabled trusted-LAN fake profile with one command:
+
+```bash
+./run_app.sh
+```
+
+The helper runs the existing matching Debug binary without rebuilding. Use `--build` after source
+or configuration-contract changes, and use `--config assets/configs/examples/fake_camera.json` for
+the Pilot-disabled profile.
+
 Direct provider endpoints include `/health`, `/metadata`, color/depth MJPEG streams, color/depth
 JPEG snapshots, ROI/pixel depth queries, `/snapshot/pointcloud.bin`, and the direct recording
 `POST /recordings/start`, `POST /recordings/stop`, and `GET /recordings/current` lifecycle. Recording
@@ -65,9 +75,12 @@ configured absolute artifact root; Vision does not perform episode or dataset co
 The additive camera-mount geometry contract is published as Vision Provider API `1.3.0`.
 
 The fake-camera default disables Pilot. Use `assets/configs/examples/fake_camera_pilot.json` to
-enable the public HTTP lifecycle client against a local fake or deployed Pilot endpoint. The
-integration has no TLS/authentication or physical-camera acceptance claim. Phase 6 geometry and
-product integrations remain separate work.
+enable the public HTTP lifecycle client against a local Pilot and expose the direct provider to the
+trusted LAN. That example binds on `0.0.0.0`, advertises `192.168.219.106:8900`, and allows the
+matching Portal development origins. Update the concrete advertised host and exact
+`allowed_origins` whenever the host LAN address or Portal port changes; never advertise `0.0.0.0`.
+The integration has no TLS/authentication or physical-camera acceptance claim. Phase 6 geometry
+and product integrations remain separate work.
 
 No physical D435 acceptance has been performed. Starting an Intel D435 config requires an explicit
 hardware validation task and device-access approval.

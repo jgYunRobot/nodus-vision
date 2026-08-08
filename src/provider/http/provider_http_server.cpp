@@ -5,6 +5,7 @@
 
 #include "provider_http_server.hpp"
 
+#include <algorithm>
 #include <atomic>
 #include <boost/asio.hpp>
 #include <boost/beast.hpp>
@@ -31,6 +32,12 @@ namespace http = beast::http;
 using tcp = asio::ip::tcp;
 
 constexpr const char* MJPEG_BOUNDARY = "nodus_frame";
+constexpr const char* CORS_ALLOW_HEADERS = "Accept, Content-Type";
+constexpr const char* CORS_ALLOW_METHODS = "GET, POST, OPTIONS";
+constexpr const char* CORS_EXPOSE_HEADERS =
+    "X-Nodus-Capture-Generation, X-Nodus-Frame-Number, "
+    "X-Nodus-Capture-Timestamp-Ns, X-Nodus-Capture-Unix-Epoch-Ns, "
+    "X-Nodus-Sensor-Frame, X-Nodus-Mount-Frame, X-Nodus-Calibration-Id";
 
 ProviderHttpResponse makeErrorResponse(int status, const std::string& code,
                                        const std::string& message, bool retryable) {
@@ -71,13 +78,14 @@ class HttpSession final : public std::enable_shared_from_this<HttpSession> {
     using ClosedHandler = std::function<void(bool)>;
 
     HttpSession(tcp::socket socket, int timeout_ms, int header_bytes, int body_bytes,
-                ProviderHttpRoutes routes, StreamAdmission stream_admission,
-                ClosedHandler closed_handler)
+                std::vector<std::string> allowed_origins, ProviderHttpRoutes routes,
+                StreamAdmission stream_admission, ClosedHandler closed_handler)
         : m_stream(std::move(socket)),
           m_idle_timer(m_stream.get_executor()),
           m_timeout_ms(timeout_ms),
           m_header_bytes(header_bytes),
           m_body_bytes(body_bytes),
+          m_allowed_origins(std::move(allowed_origins)),
           m_routes(std::move(routes)),
           m_stream_admission(std::move(stream_admission)),
           m_closed_handler(std::move(closed_handler)) {}
@@ -128,6 +136,26 @@ class HttpSession final : public std::enable_shared_from_this<HttpSession> {
 
         const http::request<http::string_body>& request = m_parser.get();
         const std::string target(request.target());
+        const auto origin_header = request.find("Origin");
+        if (origin_header != request.end()) {
+            const std::string requested_origin(origin_header->value());
+            if (std::find(m_allowed_origins.begin(), m_allowed_origins.end(), requested_origin) ==
+                m_allowed_origins.end()) {
+                sendResponse(makeErrorResponse(403, "cors_origin_denied",
+                                               "Browser origin is not allowed.", false));
+                return;
+            }
+            m_allowed_origin = requested_origin;
+        }
+        if (request.method() == http::verb::options) {
+            if (m_allowed_origin.empty()) {
+                sendResponse(makeErrorResponse(403, "cors_origin_required",
+                                               "Browser preflight origin is required.", false));
+                return;
+            }
+            sendPreflightResponse(request.version());
+            return;
+        }
         if (target == "/stream/color.mjpg" || target == "/stream/depth.mjpg") {
             if (request.method() != http::verb::get) {
                 sendResponse(
@@ -195,6 +223,7 @@ class HttpSession final : public std::enable_shared_from_this<HttpSession> {
             static_cast<http::status>(payload.status), request.version());
         p_response->set(http::field::content_type, payload.content_type);
         p_response->set(http::field::cache_control, "no-store");
+        setCorsHeaders(*p_response);
         for (const std::pair<std::string, std::string>& header : payload.headers) {
             p_response->set(header.first, header.second);
         }
@@ -206,6 +235,31 @@ class HttpSession final : public std::enable_shared_from_this<HttpSession> {
                           [self = shared_from_this(), p_response](beast::error_code, std::size_t) {
                               self->cancelSession();
                           });
+    }
+
+    void sendPreflightResponse(unsigned int version) {
+        auto p_response =
+            std::make_shared<http::response<http::empty_body>>(http::status::no_content, version);
+        setCorsHeaders(*p_response);
+        p_response->set("Access-Control-Allow-Methods", CORS_ALLOW_METHODS);
+        p_response->set("Access-Control-Allow-Headers", CORS_ALLOW_HEADERS);
+        p_response->set("Access-Control-Max-Age", "600");
+        p_response->keep_alive(false);
+        m_stream.expires_after(std::chrono::milliseconds(m_timeout_ms));
+        http::async_write(m_stream, *p_response,
+                          [self = shared_from_this(), p_response](beast::error_code, std::size_t) {
+                              self->cancelSession();
+                          });
+    }
+
+    template <class Body>
+    void setCorsHeaders(http::response<Body>& response) const {
+        if (m_allowed_origin.empty()) {
+            return;
+        }
+        response.set("Access-Control-Allow-Origin", m_allowed_origin);
+        response.set(http::field::vary, "Origin");
+        response.set("Access-Control-Expose-Headers", CORS_EXPOSE_HEADERS);
     }
 
     void startStream(ProviderStreamKind kind, unsigned int version) {
@@ -247,6 +301,7 @@ class HttpSession final : public std::enable_shared_from_this<HttpSession> {
             std::string("multipart/x-mixed-replace; boundary=") + MJPEG_BOUNDARY);
         m_p_stream_response->set(http::field::cache_control, "no-store");
         m_p_stream_response->set(http::field::connection, "close");
+        setCorsHeaders(*m_p_stream_response);
         m_p_stream_serializer =
             std::make_unique<http::response_serializer<http::empty_body>>(*m_p_stream_response);
         m_write_in_progress = true;
@@ -335,6 +390,8 @@ class HttpSession final : public std::enable_shared_from_this<HttpSession> {
     int m_timeout_ms;
     int m_header_bytes;
     int m_body_bytes;
+    std::vector<std::string> m_allowed_origins;
+    std::string m_allowed_origin;
     ProviderHttpRoutes m_routes;
     StreamAdmission m_stream_admission;
     ClosedHandler m_closed_handler;
@@ -357,7 +414,8 @@ class HttpSession final : public std::enable_shared_from_this<HttpSession> {
 class ProviderHttpServer::Impl {
    public:
     Impl(std::string bind_host, int port, int max_connections, int max_stream_clients,
-         int timeout_ms, int header_bytes, int body_bytes, ProviderHttpRoutes routes)
+         int timeout_ms, int header_bytes, int body_bytes, std::vector<std::string> allowed_origins,
+         ProviderHttpRoutes routes)
         : m_bind_host(std::move(bind_host)),
           m_port(port),
           m_max_connections(max_connections),
@@ -365,6 +423,7 @@ class ProviderHttpServer::Impl {
           m_timeout_ms(timeout_ms),
           m_header_bytes(header_bytes),
           m_body_bytes(body_bytes),
+          m_allowed_origins(std::move(allowed_origins)),
           m_routes(std::move(routes)),
           m_acceptor(m_io_context) {}
 
@@ -378,7 +437,8 @@ class ProviderHttpServer::Impl {
                     const std::uint64_t session_id = ++m_next_session_id;
                     ++m_active_connections;
                     std::shared_ptr<HttpSession> session = std::make_shared<HttpSession>(
-                        std::move(socket), m_timeout_ms, m_header_bytes, m_body_bytes, m_routes,
+                        std::move(socket), m_timeout_ms, m_header_bytes, m_body_bytes,
+                        m_allowed_origins, m_routes,
                         [this](ProviderStreamKind) { return admitStream(); },
                         [this, session_id](bool was_streaming) {
                             closeSession(session_id, was_streaming);
@@ -448,6 +508,7 @@ class ProviderHttpServer::Impl {
     int m_timeout_ms;
     int m_header_bytes;
     int m_body_bytes;
+    std::vector<std::string> m_allowed_origins;
     ProviderHttpRoutes m_routes;
     asio::io_context m_io_context{1};
     tcp::acceptor m_acceptor;
@@ -465,10 +526,11 @@ class ProviderHttpServer::Impl {
 ProviderHttpServer::ProviderHttpServer(std::string bind_host, int port, int max_connections,
                                        int max_stream_clients, int request_timeout_ms,
                                        int max_header_bytes, int max_body_bytes,
+                                       std::vector<std::string> allowed_origins,
                                        ProviderHttpRoutes routes)
-    : m_p_impl(std::make_unique<Impl>(std::move(bind_host), port, max_connections,
-                                      max_stream_clients, request_timeout_ms, max_header_bytes,
-                                      max_body_bytes, std::move(routes))) {}
+    : m_p_impl(std::make_unique<Impl>(
+          std::move(bind_host), port, max_connections, max_stream_clients, request_timeout_ms,
+          max_header_bytes, max_body_bytes, std::move(allowed_origins), std::move(routes))) {}
 
 ProviderHttpServer::~ProviderHttpServer() { stopServer(); }
 

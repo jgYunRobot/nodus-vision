@@ -31,12 +31,16 @@ using tcp = asio::ip::tcp;
 
 http::response<http::string_body> requestResponse(int port, http::verb method,
                                                   const std::string& target,
-                                                  const std::string& body = {}) {
+                                                  const std::string& body = {},
+                                                  const std::string& origin = {}) {
     asio::io_context context;
     tcp::socket socket(context);
     socket.connect({asio::ip::make_address("127.0.0.1"), static_cast<unsigned short>(port)});
     http::request<http::string_body> request{method, target, 11};
     request.set(http::field::host, "localhost");
+    if (!origin.empty()) {
+        request.set("Origin", origin);
+    }
     if (!body.empty()) {
         request.set(http::field::content_type, "application/json");
         request.body() = body;
@@ -106,9 +110,12 @@ class StreamClient {
         m_socket.connect({asio::ip::make_address("127.0.0.1"), static_cast<unsigned short>(port)});
     }
 
-    std::string openStream(const std::string& target) {
+    std::string openStream(const std::string& target, const std::string& origin = {}) {
         http::request<http::empty_body> request{http::verb::get, target, 11};
         request.set(http::field::host, "localhost");
+        if (!origin.empty()) {
+            request.set("Origin", origin);
+        }
         http::write(m_socket, request);
         return readThrough("\r\n\r\n");
     }
@@ -177,7 +184,7 @@ bool waitForStreamCount(ProviderHttpServer& server, int expected) {
 
 TEST(ProviderHttpServer, PreservesRoutePayloadHeadersAndNoStoreResponses) {
     std::shared_ptr<const ProviderStreamFrame> current_stream_frame = makeStreamFrame(1U);
-    ProviderHttpServer server("127.0.0.1", 0, 4, 2, 1000, 8192, 4096,
+    ProviderHttpServer server("127.0.0.1", 0, 4, 2, 1000, 8192, 4096, std::vector<std::string>{},
                               makeRoutes(&current_stream_frame));
     server.startServer();
 
@@ -211,7 +218,7 @@ TEST(ProviderHttpServer, PreservesRoutePayloadHeadersAndNoStoreResponses) {
 
 TEST(ProviderHttpServer, StreamsLatestFrameAndBoundsSlowClients) {
     std::shared_ptr<const ProviderStreamFrame> current_stream_frame = makeStreamFrame(1U);
-    ProviderHttpServer server("127.0.0.1", 0, 4, 1, 2000, 8192, 4096,
+    ProviderHttpServer server("127.0.0.1", 0, 4, 1, 2000, 8192, 4096, std::vector<std::string>{},
                               makeRoutes(&current_stream_frame));
     server.startServer();
 
@@ -242,7 +249,7 @@ TEST(ProviderHttpServer, StreamsLatestFrameAndBoundsSlowClients) {
 
 TEST(ProviderHttpServer, RestartsAfterBoundedCancellation) {
     std::shared_ptr<const ProviderStreamFrame> current_stream_frame = makeStreamFrame(1U);
-    ProviderHttpServer server("127.0.0.1", 0, 2, 1, 1000, 8192, 4096,
+    ProviderHttpServer server("127.0.0.1", 0, 2, 1, 1000, 8192, 4096, std::vector<std::string>{},
                               makeRoutes(&current_stream_frame));
     server.startServer();
     EXPECT_GT(server.getBoundPort(), 0);
@@ -255,7 +262,7 @@ TEST(ProviderHttpServer, RestartsAfterBoundedCancellation) {
 
 TEST(ProviderHttpServer, CancelsBlockedSlowWriterWithoutQueuingFrames) {
     std::shared_ptr<const ProviderStreamFrame> current_stream_frame = makeStreamFrame(1U);
-    ProviderHttpServer server("127.0.0.1", 0, 2, 1, 500, 8192, 4096,
+    ProviderHttpServer server("127.0.0.1", 0, 2, 1, 500, 8192, 4096, std::vector<std::string>{},
                               makeRoutes(&current_stream_frame));
     server.startServer();
 
@@ -277,6 +284,40 @@ TEST(ProviderHttpServer, CancelsBlockedSlowWriterWithoutQueuingFrames) {
     EXPECT_LT(stop_elapsed, std::chrono::seconds(1));
     EXPECT_EQ(server.getActiveConnectionCount(), 0);
     EXPECT_EQ(server.getActiveStreamClientCount(), 0);
+}
+
+TEST(ProviderHttpServer, AppliesExactOriginPolicyToResponsesPreflightAndStreams) {
+    constexpr const char* allowed_origin = "http://portal.test:5173";
+    std::shared_ptr<const ProviderStreamFrame> current_stream_frame = makeStreamFrame(1U);
+    ProviderHttpServer server("127.0.0.1", 0, 6, 2, 1000, 8192, 4096,
+                              std::vector<std::string>{allowed_origin},
+                              makeRoutes(&current_stream_frame));
+    server.startServer();
+
+    const http::response<http::string_body> health =
+        requestResponse(server.getBoundPort(), http::verb::get, "/health", {}, allowed_origin);
+    EXPECT_EQ(health.result(), http::status::ok);
+    EXPECT_EQ(health["Access-Control-Allow-Origin"], allowed_origin);
+    EXPECT_EQ(health[http::field::vary], "Origin");
+
+    const http::response<http::string_body> preflight = requestResponse(
+        server.getBoundPort(), http::verb::options, "/metadata", {}, allowed_origin);
+    EXPECT_EQ(preflight.result(), http::status::no_content);
+    EXPECT_EQ(preflight["Access-Control-Allow-Origin"], allowed_origin);
+    EXPECT_EQ(preflight["Access-Control-Allow-Methods"], "GET, POST, OPTIONS");
+    EXPECT_EQ(preflight["Access-Control-Allow-Headers"], "Accept, Content-Type");
+
+    const http::response<http::string_body> denied = requestResponse(
+        server.getBoundPort(), http::verb::get, "/health", {}, "http://denied.test:5173");
+    EXPECT_EQ(denied.result(), http::status::forbidden);
+    EXPECT_TRUE(denied["Access-Control-Allow-Origin"].empty());
+
+    StreamClient stream_client(server.getBoundPort());
+    const std::string stream_header =
+        stream_client.openStream("/stream/color.mjpg", allowed_origin);
+    EXPECT_NE(stream_header.find("Access-Control-Allow-Origin: http://portal.test:5173"),
+              std::string::npos);
+    server.stopServer();
 }
 
 }  // namespace nodus_vision

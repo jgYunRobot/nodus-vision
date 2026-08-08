@@ -387,7 +387,7 @@ hot path에서 per-frame INFO log를 남기지 않는다.
 - `device_id`, `component_id`
 - `device.adapter`와 adapter-specific typed config
 - `calibration.calibration_id`, `sensor_frame`, `mount_frame`, static matrix
-- `provider.bind_host`, `port`, `advertised_base_url`
+- `provider.bind_host`, `port`, `advertised_base_url`, and optional exact `allowed_origins`
 - provider bounds와 timeout
 
 Phase 2 config에서는 `pilot`과 `recording` section을 받지 않는다. 해당 Phase가 시작될 때 schema를
@@ -400,6 +400,7 @@ Phase 2 config에서는 `pilot`과 `recording` section을 받지 않는다. 해�
 - `max_connections`, `max_stream_clients`, timeout/body/header limit는 양수의 bounded 값이다.
 - `advertised_base_url`은 absolute HTTP URL이며 wildcard host를 금지한다.
 - `bind_host`는 wildcard를 허용하되 advertise 값과 동일시하지 않는다.
+- `allowed_origins`는 exact HTTP origin만 허용하고 omitted/empty면 browser CORS를 비활성화한다.
 - adapter가 `intel_d435`이고 serial이 비어 있으면 multi-device ambiguity를 허용하지 않는다.
 - static matrix는 finite 16-element array이며 calibration identity를 동반한다.
 

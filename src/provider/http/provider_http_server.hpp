@@ -58,7 +58,7 @@ class ProviderHttpServer {
    public:
     ProviderHttpServer(std::string bind_host, int port, int max_connections, int max_stream_clients,
                        int request_timeout_ms, int max_header_bytes, int max_body_bytes,
-                       ProviderHttpRoutes routes);
+                       std::vector<std::string> allowed_origins, ProviderHttpRoutes routes);
     ~ProviderHttpServer();
 
     ProviderHttpServer(const ProviderHttpServer&) = delete;

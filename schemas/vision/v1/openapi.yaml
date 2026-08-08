@@ -7,6 +7,13 @@ info:
     Nodus Pilot; image, depth, query, point-cloud, and recording lifecycle payloads are served
     directly by Vision.
 security: []
+x-browser-cors-policy:
+  deployment: trusted-lan
+  allowed-origins: exact-configured-values
+  allow-methods: [GET, POST, OPTIONS]
+  allow-headers: [Accept, Content-Type]
+  allow-credentials: false
+  wildcard-origin: false
 x-pilot-endpoint-catalog-schema-ids:
   health:
     response_schema_id: nodus.vision.health.response.v1

@@ -11,6 +11,8 @@
 #include <filesystem>
 #include <stdexcept>
 #include <string>
+#include <unordered_set>
+#include <vector>
 
 namespace nodus_vision {
 namespace {
@@ -130,6 +132,41 @@ int getUrlPort(const std::string& url) {
     const std::size_t path_start = url.find('/', authority_start);
     const std::string authority = url.substr(authority_start, path_start - authority_start);
     return std::stoi(authority.substr(authority.rfind(':') + 1U));
+}
+
+std::vector<std::string> requireAllowedOrigins(const boost::json::object& object, const char* key,
+                                               const char* path) {
+    const boost::json::value& value = requireField(object, key, path);
+    if (!value.is_array() || value.as_array().size() > 16U) {
+        throw std::invalid_argument(std::string(path) + ": must be a bounded array.");
+    }
+    std::vector<std::string> origins;
+    origins.reserve(value.as_array().size());
+    std::unordered_set<std::string> seen_origins;
+    for (const boost::json::value& item : value.as_array()) {
+        if (!item.is_string() || item.as_string().empty() || item.as_string().size() > 128U) {
+            throw std::invalid_argument(std::string(path) +
+                                        ": entries must be non-empty bounded strings.");
+        }
+        const std::string origin(item.as_string());
+        for (const unsigned char character : origin) {
+            if (character < 0x20U || character == 0x7FU) {
+                throw std::invalid_argument(std::string(path) +
+                                            ": entries must not contain control characters.");
+            }
+        }
+        const std::size_t path_start = origin.find('/', std::string("http://").size());
+        if (!isAdvertisedUrlValid(origin) || path_start != std::string::npos) {
+            throw std::invalid_argument(
+                std::string(path) +
+                ": entries must be exact non-wildcard HTTP origins with an explicit port.");
+        }
+        if (!seen_origins.insert(origin).second) {
+            throw std::invalid_argument(std::string(path) + ": duplicate origin is not allowed.");
+        }
+        origins.push_back(origin);
+    }
+    return origins;
 }
 
 bool isEulerTypeSupported(const std::string& euler_type) {
@@ -264,11 +301,11 @@ VisionConfig parseVisionConfig(const std::string& json_text) {
             "/calibration/mount_local_transform/euler_type: unsupported Euler convention.");
     }
     const boost::json::object& provider = requireObject(root, "provider", "/provider");
-    rejectUnknownFields(
-        provider,
-        {"bind_host", "port", "advertised_base_url", "max_connections", "max_stream_clients",
-         "request_timeout_ms", "max_header_bytes", "max_body_bytes", "max_frame_age_ms"},
-        "/provider");
+    rejectUnknownFields(provider,
+                        {"bind_host", "port", "advertised_base_url", "max_connections",
+                         "max_stream_clients", "request_timeout_ms", "max_header_bytes",
+                         "max_body_bytes", "max_frame_age_ms", "allowed_origins"},
+                        "/provider");
     config.provider.bind_host = requireString(provider, "bind_host", "/provider/bind_host");
     config.provider.port = requireBoundedInt(provider, "port", "/provider/port", 1, 65535);
     config.provider.advertised_base_url =
@@ -290,6 +327,10 @@ VisionConfig parseVisionConfig(const std::string& json_text) {
         requireBoundedInt(provider, "max_body_bytes", "/provider/max_body_bytes", 1, 10485760);
     config.provider.max_frame_age_ms =
         requireBoundedInt(provider, "max_frame_age_ms", "/provider/max_frame_age_ms", 1, 60000);
+    if (provider.if_contains("allowed_origins") != nullptr) {
+        config.provider.allowed_origins =
+            requireAllowedOrigins(provider, "allowed_origins", "/provider/allowed_origins");
+    }
     if (getUrlPort(config.provider.advertised_base_url) != config.provider.port) {
         throw std::invalid_argument(
             "/provider/advertised_base_url: port must match /provider/port.");
