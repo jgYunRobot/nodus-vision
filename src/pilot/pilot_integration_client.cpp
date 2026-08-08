@@ -206,10 +206,8 @@ class PilotIntegrationClient::Impl {
             request.instance_id = m_instance_id;
             request.capabilities = m_catalog.capabilities;
             request.started_at_ns = m_started_at_ns;
-            request.metadata["device_id"] = m_config.device_id;
-            request.metadata["sensor_frame"] = m_config.calibration.sensor_frame;
-            request.metadata["calibration_id"] = m_config.calibration.calibration_id;
-            request.metadata["provider_api_version"] = "1.2.0";
+            request.metadata = buildVisionStaticMetadata(m_config);
+            request.metadata["provider_api_version"] = "1.3.0";
             request.clock_domain = m_config.pilot.clock_domain;
             PilotHttpResult result = m_p_transport->executeRequest(
                 {"POST", "/api/v1/components/register", serializeRegistrationRequest(request)});

@@ -8,6 +8,8 @@
 #include <algorithm>
 #include <utility>
 
+#include "camera_mount_transform.hpp"
+
 namespace nodus_vision {
 namespace {
 
@@ -16,15 +18,6 @@ std::string makeEndpoint(const std::string& base_url, const char* path) {
         return base_url.substr(0U, base_url.size() - 1U) + path;
     }
     return base_url + path;
-}
-
-boost::json::object makeMetadata(const VisionConfig& config) {
-    boost::json::object metadata;
-    metadata["device_id"] = config.device_id;
-    metadata["sensor_frame"] = config.calibration.sensor_frame;
-    metadata["calibration_id"] = config.calibration.calibration_id;
-    metadata["api_version"] = "1.2.0";
-    return metadata;
 }
 
 PilotEndpointDescriptor makeService(const VisionConfig& config, const char* descriptor_id,
@@ -38,7 +31,7 @@ PilotEndpointDescriptor makeService(const VisionConfig& config, const char* desc
     descriptor.endpoint = makeEndpoint(config.provider.advertised_base_url, path);
     descriptor.media_type = media_type;
     descriptor.schema_id = schema_id;
-    descriptor.metadata = makeMetadata(config);
+    descriptor.metadata = buildVisionStaticMetadata(config);
     descriptor.service = {method, request_schema_id, schema_id};
     return descriptor;
 }
@@ -53,7 +46,7 @@ PilotEndpointDescriptor makeStream(const VisionConfig& config, const char* descr
     descriptor.endpoint = makeEndpoint(config.provider.advertised_base_url, path);
     descriptor.media_type = "multipart/x-mixed-replace";
     descriptor.schema_id = schema_id;
-    descriptor.metadata = makeMetadata(config);
+    descriptor.metadata = buildVisionStaticMetadata(config);
     descriptor.is_stream = true;
     descriptor.stream = {"monotonic_same_host", config.component_id + ".capture"};
     return descriptor;
@@ -64,6 +57,22 @@ bool isColorEnabled(const VisionConfig& config) {
 }
 
 }  // namespace
+
+boost::json::object buildVisionStaticMetadata(const VisionConfig& config) {
+    const CameraMountTransform transform = buildCameraMountTransform(config.calibration);
+    boost::json::array matrix;
+    for (const double value : transform.mount_from_camera_optical_matrix4x4) {
+        matrix.emplace_back(value);
+    }
+    boost::json::object metadata;
+    metadata["device_id"] = config.device_id;
+    metadata["sensor_frame"] = transform.sensor_frame;
+    metadata["mount_frame"] = transform.mount_frame;
+    metadata["calibration_id"] = transform.calibration_id;
+    metadata["mount_from_camera_optical_matrix4x4"] = std::move(matrix);
+    metadata["api_version"] = "1.3.0";
+    return metadata;
+}
 
 VisionEndpointCatalog VisionEndpointCatalogBuilder::buildCatalog(const VisionConfig& config) const {
     VisionEndpointCatalog result;

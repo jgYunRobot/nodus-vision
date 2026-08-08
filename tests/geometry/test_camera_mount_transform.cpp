@@ -5,8 +5,11 @@
 
 #include <gtest/gtest.h>
 
+#include <boost/json.hpp>
 #include <cmath>
+#include <fstream>
 #include <limits>
+#include <sstream>
 #include <stdexcept>
 
 #include "camera_mount_transform.hpp"
@@ -23,6 +26,21 @@ CalibrationConfig makeCalibration() {
     calibration.mount_frame = "e_rob_wrist_cam";
     calibration.mount_local_transform = {0.0, 0.0, 0.06, 0.0, 0.0, 0.0, "XYZ"};
     return calibration;
+}
+
+std::array<double, 3> transformPoint(const boost::json::array& matrix,
+                                     const boost::json::object& point) {
+    std::array<double, 3> result{};
+    const std::array<double, 3> input = {point.at("x").to_number<double>(),
+                                         point.at("y").to_number<double>(),
+                                         point.at("z").to_number<double>()};
+    for (int row = 0; row < 3; ++row) {
+        result.at(row) = matrix.at(row * 4 + 3).to_number<double>();
+        for (int column = 0; column < 3; ++column) {
+            result.at(row) += matrix.at(row * 4 + column).to_number<double>() * input.at(column);
+        }
+    }
+    return result;
 }
 
 }  // namespace
@@ -76,6 +94,37 @@ TEST(CameraMountTransform, RejectsInvalidCalibrationAndPoints) {
     EXPECT_THROW(transformCameraPointToMount({std::numeric_limits<float>::quiet_NaN(), 0.0F, 0.0F},
                                              transform),
                  std::invalid_argument);
+}
+
+TEST(CameraMountTransform, FixtureAppliesStaticAndDynamicTransformsExactlyOnce) {
+    const std::string fixture_path = std::string(NODUS_VISION_SOURCE_DIR) +
+                                     "/schemas/vision/v1/fixtures/camera_mount_geometry_v1.json";
+    std::ifstream input(fixture_path);
+    ASSERT_TRUE(input.is_open());
+    std::ostringstream contents;
+    contents << input.rdbuf();
+    const boost::json::object fixture = boost::json::parse(contents.str()).as_object();
+    ASSERT_EQ(fixture.at("mount_from_camera_optical_matrix4x4").as_array().size(), 16U);
+    const std::array<double, 3> point_mount =
+        transformPoint(fixture.at("mount_from_camera_optical_matrix4x4").as_array(),
+                       fixture.at("point_camera_optical_m").as_object());
+    const boost::json::object& expected_mount = fixture.at("point_mount_m").as_object();
+    EXPECT_NEAR(point_mount.at(0), expected_mount.at("x").to_number<double>(), 1.0e-12);
+    EXPECT_NEAR(point_mount.at(1), expected_mount.at("y").to_number<double>(), 1.0e-12);
+    EXPECT_NEAR(point_mount.at(2), expected_mount.at("z").to_number<double>(), 1.0e-12);
+
+    const boost::json::array& dynamic_poses = fixture.at("dynamic_mount_poses").as_array();
+    ASSERT_EQ(dynamic_poses.size(), 2U);
+    for (const boost::json::value& value : dynamic_poses) {
+        const boost::json::object& pose = value.as_object();
+        const std::array<double, 3> point_root = transformPoint(
+            pose.at("root_from_mount_matrix4x4").as_array(),
+            {{"x", point_mount.at(0)}, {"y", point_mount.at(1)}, {"z", point_mount.at(2)}});
+        const boost::json::object& expected_root = pose.at("point_root_m").as_object();
+        EXPECT_NEAR(point_root.at(0), expected_root.at("x").to_number<double>(), 1.0e-12);
+        EXPECT_NEAR(point_root.at(1), expected_root.at("y").to_number<double>(), 1.0e-12);
+        EXPECT_NEAR(point_root.at(2), expected_root.at("z").to_number<double>(), 1.0e-12);
+    }
 }
 
 }  // namespace nodus_vision

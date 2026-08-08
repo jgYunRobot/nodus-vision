@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "pcd1_version": 2,
+  "point_array_frame": "front_d435_color_optical_frame",
+  "matrix_target_frame": "e_rob_wrist_cam",
+  "point_camera_optical_m": {"x": 0.1, "y": 0.2, "z": 0.5},
+  "mount_from_camera_optical_matrix3x4": [
+    1, 0, 0, 0,
+    0, 0, 1, 0,
+    0, -1, 0, 0.06
+  ],
+  "point_mount_m": {"x": 0.1, "y": 0.5, "z": -0.14}
+}

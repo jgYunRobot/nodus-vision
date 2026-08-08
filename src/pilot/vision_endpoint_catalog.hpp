@@ -6,6 +6,7 @@
 #ifndef NODUS_VISION_PILOT_VISION_ENDPOINT_CATALOG_HPP_
 #define NODUS_VISION_PILOT_VISION_ENDPOINT_CATALOG_HPP_
 
+#include <boost/json.hpp>
 #include <string>
 #include <vector>
 
@@ -19,6 +20,9 @@ struct VisionEndpointCatalog {
     std::vector<PilotEndpointDescriptor> descriptors;
     std::vector<std::string> capabilities;
 };
+
+/** @brief Vision의 static camera mount metadata를 Pilot public JSON으로 만든다. */
+boost::json::object buildVisionStaticMetadata(const VisionConfig& config);
 
 /** @brief Vision config에서 Pilot endpoint descriptors를 결정적으로 생성한다. */
 class VisionEndpointCatalogBuilder {

@@ -175,6 +175,8 @@ VisionConfig makeConfig(const std::string& base_url, bool enabled = true) {
     config.provider.advertised_base_url = "http://127.0.0.1:8900";
     config.calibration.calibration_id = "fake-v1";
     config.calibration.sensor_frame = "fake_optical";
+    config.calibration.mount_frame = "fake_mount";
+    config.calibration.mount_local_transform = {0.0, 0.0, 0.06, 0.0, 0.0, 0.0, "XYZ"};
     config.pilot = {enabled, base_url, "monotonic_same_host", 50, 50, 4096, 5, 20, 50};
     return config;
 }
@@ -225,7 +227,20 @@ TEST(PilotIntegrationClient, UsesOneSequenceForStateHeartbeatAndBoundedDisconnec
                   .at("metadata")
                   .as_object()
                   .at("provider_api_version"),
-              "1.2.0");
+              "1.3.0");
+    EXPECT_EQ(boost::json::parse(requests.front().second)
+                  .as_object()
+                  .at("metadata")
+                  .as_object()
+                  .at("mount_frame"),
+              "fake_mount");
+    const auto catalog_request = std::find_if(
+        requests.begin(), requests.end(), [](const std::pair<std::string, std::string>& request) {
+            return request.first.find("/endpoint-catalog") != std::string::npos;
+        });
+    ASSERT_NE(catalog_request, requests.end());
+    EXPECT_EQ(catalog_request->second.find("PCD1"), std::string::npos);
+    EXPECT_EQ(catalog_request->second.find("point_camera_m"), std::string::npos);
     EXPECT_EQ(requests.back().first, "/api/v1/components/opaque%2Fsession%20secret/disconnect");
     std::uint64_t previous_sequence = 0U;
     for (const auto& request : requests) {
