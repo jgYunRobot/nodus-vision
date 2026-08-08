@@ -1,5 +1,40 @@
 # Progress
 
+## 2026-08-09 - Physical D435 Depth preview acceptance
+
+### Changes
+
+- Completed DP3 acceptance for the immutable D435 Depth-preview implementation without changing
+  Pilot, Portal, public schema/version, or any endpoint contract.
+- Ran the configured provider only for the acceptance window and stopped it cleanly afterward.
+
+### Status
+
+- Accepted device: Intel RealSense D435 (`8086:0b07`), librealsense serial `241222076339`.
+- Accepted profile: Depth Z16 640x480@30 and Color RGB8 640x480@30; local Pilot
+  `127.0.0.1:8765`; trusted-LAN Provider `192.168.219.106:8902`.
+- Exact command: `./run_app.sh --config assets/configs/examples/intel_d435_pilot.json`.
+- Portal Depth card loaded as 640x480 and its pixels changed over time, as observed by the
+  operator during the approved hardware run.
+
+### Validation
+
+- `/health` remained `ready` with Camera `streaming`, Pilot `online`, zero capture timeouts, and
+  zero drops.
+- Two `/snapshot/depth` responses were `200 image/jpeg`, decoded as 640x480 RGB JPEGs, and their
+  `X-Nodus-Frame-Number` advanced from 19 to 49.
+- One `/stream/depth.mjpg` connection returned `200 multipart/x-mixed-replace`; four seconds
+  yielded 120 boundaries and increasing frame identities from 50 through 169.
+- While a 1-byte/s Depth stream client was active, capture advanced from 204 to 269; a 640x480
+  Color snapshot and raw `/query/pixel_to_point` remained successful.
+- Provider shutdown completed in 355 ms after the active stream was released.
+- DP2 remains green: Debug build completed and 25/25 hardware-independent CTests passed.
+
+### Next goals
+
+- No additional work is required for this Depth-preview design. The provider is not left running
+  by this acceptance checkpoint.
+
 ## 2026-08-09 - D435 Depth preview hardware-independent regression
 
 ### Changes
