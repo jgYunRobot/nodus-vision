@@ -23,7 +23,7 @@ boost::json::object makeMetadata(const VisionConfig& config) {
     metadata["device_id"] = config.device_id;
     metadata["sensor_frame"] = config.calibration.sensor_frame;
     metadata["calibration_id"] = config.calibration.calibration_id;
-    metadata["api_version"] = "1.1.0";
+    metadata["api_version"] = "1.2.0";
     return metadata;
 }
 

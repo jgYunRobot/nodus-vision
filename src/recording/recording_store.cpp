@@ -6,11 +6,16 @@
 #include <unistd.h>
 
 #include <cerrno>
+#include <cstdint>
 #include <cstring>
+#include <fstream>
+#include <optional>
 #include <stdexcept>
 
 namespace nodus_vision {
 namespace {
+
+constexpr std::uintmax_t MAX_REQUEST_FILE_BYTES = 1048576U;
 
 void rejectSymlink(const std::filesystem::path& path) {
     const std::filesystem::file_status status = std::filesystem::symlink_status(path);
@@ -63,6 +68,28 @@ void writeAtomically(const std::filesystem::path& directory, const std::string& 
         throw std::runtime_error("Recording request file activation failed.");
     }
     syncDirectory(directory);
+}
+
+std::string readBoundedRegularFile(const std::filesystem::path& path) {
+    const std::filesystem::file_status status = std::filesystem::symlink_status(path);
+    if (std::filesystem::is_symlink(status) || !std::filesystem::is_regular_file(status)) {
+        throw std::runtime_error("Recording request evidence must be a regular file.");
+    }
+    std::error_code error;
+    const std::uintmax_t size = std::filesystem::file_size(path, error);
+    if (error || size > MAX_REQUEST_FILE_BYTES) {
+        throw std::runtime_error("Recording request evidence exceeds its bounded size.");
+    }
+    std::ifstream input(path, std::ios::in | std::ios::binary);
+    if (!input.is_open()) {
+        throw std::runtime_error("Recording request evidence cannot be opened.");
+    }
+    std::string contents(static_cast<std::size_t>(size), '\0');
+    input.read(contents.data(), static_cast<std::streamsize>(contents.size()));
+    if (!input || input.gcount() != static_cast<std::streamsize>(contents.size())) {
+        throw std::runtime_error("Recording request evidence cannot be read completely.");
+    }
+    return contents;
 }
 
 }  // namespace
@@ -167,6 +194,48 @@ std::size_t RecordingStore::getStagingCount() const {
         }
     }
     return count;
+}
+
+std::optional<PersistedRecordingArtifact> RecordingStore::findPersistedArtifact(
+    const std::string& recording_id) const {
+    if (!isRecordingIdValid(recording_id)) {
+        throw std::invalid_argument("Recording ID is unsafe.");
+    }
+    const RecordingArtifactPaths paths{m_root / ".staging" / recording_id,
+                                       m_root / "finalized" / recording_id};
+    if (std::filesystem::exists(m_root)) {
+        rejectSymlink(m_root);
+    }
+    for (const std::filesystem::path& managed_parent :
+         {m_root / ".staging", m_root / "finalized"}) {
+        if (std::filesystem::exists(managed_parent)) {
+            rejectSymlink(managed_parent);
+        }
+    }
+    const bool staging_exists = std::filesystem::exists(paths.staging_directory);
+    const bool finalized_exists = std::filesystem::exists(paths.finalized_directory);
+    if (staging_exists && finalized_exists) {
+        throw std::runtime_error("Recording identity exists in staging and finalized storage.");
+    }
+    if (!staging_exists && !finalized_exists) {
+        return std::nullopt;
+    }
+    const bool finalized = finalized_exists;
+    const std::filesystem::path& directory =
+        finalized ? paths.finalized_directory : paths.staging_directory;
+    rejectSymlink(directory);
+    if (!std::filesystem::is_directory(directory)) {
+        throw std::runtime_error("Recording artifact identity is not a directory.");
+    }
+    PersistedRecordingArtifact artifact;
+    artifact.paths = paths;
+    artifact.finalized = finalized;
+    artifact.start_request = readBoundedRegularFile(directory / "start_request.json");
+    const std::filesystem::path stop_request = directory / "stop_request.json";
+    if (std::filesystem::exists(stop_request)) {
+        artifact.stop_request = readBoundedRegularFile(stop_request);
+    }
+    return artifact;
 }
 
 }  // namespace nodus_vision

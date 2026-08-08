@@ -55,7 +55,8 @@ class ColorVideoWriter::Impl {
     void initialize() {
         if (m_config.output_path.empty() || m_config.width <= 0 || m_config.height <= 0 ||
             m_config.width % 2 != 0 || m_config.height % 2 != 0 || m_config.fps <= 0 ||
-            m_config.bit_rate_bps <= 0) {
+            m_config.bit_rate_bps <= 0 || m_config.preset != "veryfast" ||
+            m_config.tune != "zerolatency") {
             throw std::invalid_argument("Color writer profile is invalid.");
         }
         checkFfmpegResult(avformat_alloc_output_context2(&m_p_format_context, nullptr, "mp4",
@@ -82,10 +83,12 @@ class ColorVideoWriter::Impl {
         if ((m_p_format_context->oformat->flags & AVFMT_GLOBALHEADER) != 0) {
             m_p_codec_context->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
         }
-        checkFfmpegResult(av_opt_set(m_p_codec_context->priv_data, "preset", "veryfast", 0),
-                          "Cannot configure H.264 preset");
-        checkFfmpegResult(av_opt_set(m_p_codec_context->priv_data, "tune", "zerolatency", 0),
-                          "Cannot configure H.264 tune");
+        checkFfmpegResult(
+            av_opt_set(m_p_codec_context->priv_data, "preset", m_config.preset.c_str(), 0),
+            "Cannot configure H.264 preset");
+        checkFfmpegResult(
+            av_opt_set(m_p_codec_context->priv_data, "tune", m_config.tune.c_str(), 0),
+            "Cannot configure H.264 tune");
         checkFfmpegResult(avcodec_open2(m_p_codec_context, p_codec, nullptr),
                           "Cannot open H.264 encoder");
         m_p_stream = avformat_new_stream(m_p_format_context, nullptr);

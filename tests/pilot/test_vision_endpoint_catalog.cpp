@@ -44,7 +44,7 @@ TEST(VisionEndpointCatalog, BuildsStableDirectColorCatalog) {
                   .at("metadata")
                   .as_object()
                   .at("api_version"),
-              "1.1.0");
+              "1.2.0");
 }
 
 TEST(VisionEndpointCatalog, OmitsOnlyColorDescriptorsWhenColorIsDisabled) {
@@ -68,6 +68,11 @@ TEST(VisionEndpointCatalog, AddsOnlyDirectRecordingServicesWhenEnabled) {
     EXPECT_EQ(catalog.descriptors.at(9).descriptor_id, "recording-start");
     EXPECT_EQ(catalog.descriptors.at(10).descriptor_id, "recording-stop");
     EXPECT_EQ(catalog.descriptors.at(8).endpoint, "http://127.0.0.1:8900/recordings/current");
+    EXPECT_EQ(catalog.descriptors.at(8).metadata.at("api_version"), "1.2.0");
+    EXPECT_EQ(catalog.descriptors.at(9).service.request_schema_id,
+              "nodus.vision.recording.start.request.v1");
+    EXPECT_EQ(catalog.descriptors.at(10).service.response_schema_id,
+              "nodus.vision.recording.stop.response.v1");
 }
 
 }  // namespace nodus_vision

@@ -24,3 +24,10 @@ add_test(
         -DVISION_OPENAPI=${CMAKE_SOURCE_DIR}/schemas/vision/v1/openapi.yaml
         -P ${CMAKE_CURRENT_SOURCE_DIR}/verify_vision_health_openapi.cmake
 )
+
+add_test(
+    NAME contract_test_vision_recording_openapi
+    COMMAND ${CMAKE_COMMAND}
+        -DVISION_OPENAPI=${CMAKE_SOURCE_DIR}/schemas/vision/v1/openapi.yaml
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/verify_vision_recording_openapi.cmake
+)

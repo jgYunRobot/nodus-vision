@@ -136,7 +136,8 @@ TEST(ColorVideoWriter, MatchesDecoderVisibleFrameCountForShortSyntheticVideos) {
         TemporaryOutputDirectory directory;
         const std::filesystem::path output = directory.getPath() / "color.mp4";
         {
-            ColorVideoWriter writer({output, k_width, k_height, 30, 100000});
+            ColorVideoWriter writer(
+                {output, k_width, k_height, 30, 100000, "veryfast", "zerolatency"});
             for (int index = 0; index < count; ++index) {
                 EXPECT_EQ(writer.writeFrame(
                               makeFrame(k_width, k_height, static_cast<std::uint8_t>(index))),
@@ -159,12 +160,24 @@ TEST(ColorVideoWriter, MatchesDecoderVisibleFrameCountForShortSyntheticVideos) {
 
 TEST(ColorVideoWriter, RejectsInvalidProfileAndFrameStride) {
     TemporaryOutputDirectory directory;
-    EXPECT_THROW(ColorVideoWriter({directory.getPath() / "odd.mp4", 3, 4, 30, 100000}),
+    EXPECT_THROW(ColorVideoWriter({directory.getPath() / "odd.mp4", 3, 4, 30, 100000, "veryfast",
+                                   "zerolatency"}),
                  std::invalid_argument);
-    ColorVideoWriter writer({directory.getPath() / "color.mp4", 4, 4, 30, 100000});
+    ColorVideoWriter writer(
+        {directory.getPath() / "color.mp4", 4, 4, 30, 100000, "veryfast", "zerolatency"});
     VideoFrameView frame = makeFrame(4, 4, 0U);
     frame.stride_bytes = 1;
     EXPECT_THROW(writer.writeFrame(frame), std::invalid_argument);
+}
+
+TEST(ColorVideoWriter, RejectsUnsupportedPresetAndTune) {
+    TemporaryOutputDirectory directory;
+    EXPECT_THROW(ColorVideoWriter(
+                     {directory.getPath() / "preset.mp4", 4, 4, 30, 100000, "slow", "zerolatency"}),
+                 std::invalid_argument);
+    EXPECT_THROW(
+        ColorVideoWriter({directory.getPath() / "tune.mp4", 4, 4, 30, 100000, "veryfast", "film"}),
+        std::invalid_argument);
 }
 
 }  // namespace nodus_vision

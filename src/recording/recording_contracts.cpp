@@ -52,4 +52,16 @@ std::string serializeRecordingStartRequest(const RecordingStartRequest& request)
     return boost::json::serialize(root);
 }
 
+const char* getRecordingStopReasonName(RecordingStopReason reason) noexcept {
+    switch (reason) {
+        case RecordingStopReason::e_REQUESTED:
+            return "requested";
+        case RecordingStopReason::e_MAX_DURATION:
+            return "max_duration";
+        case RecordingStopReason::e_APPLICATION_SHUTDOWN:
+            return "application_shutdown";
+    }
+    return "application_shutdown";
+}
+
 }  // namespace nodus_vision

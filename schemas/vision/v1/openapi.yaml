@@ -1,10 +1,11 @@
 openapi: 3.1.0
 info:
   title: Nodus Vision Provider API
-  version: 1.1.0
+  version: 1.2.0
   description: >-
     Trusted same-host or LAN camera payload API. Component discovery is handled separately by
-    Nodus Pilot; image, depth, query, and point-cloud payloads are served directly by Vision.
+    Nodus Pilot; image, depth, query, point-cloud, and recording lifecycle payloads are served
+    directly by Vision.
 security: []
 x-pilot-endpoint-catalog-schema-ids:
   health:
@@ -27,6 +28,14 @@ x-pilot-endpoint-catalog-schema-ids:
     response_schema_id: nodus.vision.pixel_point.response.v1
   pointcloud-binary:
     response_schema_id: nodus.vision.pointcloud.pcd1.v2
+  recording-start:
+    request_schema_id: nodus.vision.recording.start.request.v1
+    response_schema_id: nodus.vision.recording.start.response.v1
+  recording-stop:
+    request_schema_id: nodus.vision.recording.stop.request.v1
+    response_schema_id: nodus.vision.recording.stop.response.v1
+  recording-current:
+    response_schema_id: nodus.vision.recording.current.response.v1
 paths:
   /health:
     get:
@@ -228,6 +237,74 @@ paths:
                 contentEncoding: binary
         '503':
           $ref: '#/components/responses/NoFreshFrame'
+  /recordings/start:
+    post:
+      operationId: startRecording
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecordingStartRequest'
+      responses:
+        '201':
+          description: A new recording entered the recording state.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecordingCommandResponse'
+        '200':
+          description: Exact replay of an already accepted start request.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecordingCommandResponse'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '409':
+          $ref: '#/components/responses/RecordingConflict'
+        '503':
+          $ref: '#/components/responses/RecordingUnavailable'
+  /recordings/stop:
+    post:
+      operationId: stopRecording
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecordingStopRequest'
+      responses:
+        '202':
+          description: Recording finalization was accepted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecordingCommandResponse'
+        '200':
+          description: Exact replay of an already finalized stop request.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecordingCommandResponse'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '404':
+          $ref: '#/components/responses/RecordingNotFound'
+        '409':
+          $ref: '#/components/responses/RecordingConflict'
+        '503':
+          $ref: '#/components/responses/RecordingUnavailable'
+  /recordings/current:
+    get:
+      operationId: getCurrentRecording
+      responses:
+        '200':
+          description: Current recording lifecycle and finalized artifact reference.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecordingCurrentResponse'
 components:
   headers:
     CaptureGeneration:
@@ -289,6 +366,24 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
+    RecordingConflict:
+      description: Recording identity, request identity, or active lifecycle conflicts.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    RecordingNotFound:
+      description: The requested recording identity is unknown.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    RecordingUnavailable:
+      description: Recording is disabled or its bounded resources are unavailable.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
   schemas:
     ErrorResponse:
       type: object
@@ -332,7 +427,7 @@ components:
     HealthResponse:
       type: object
       additionalProperties: false
-      required: [schema_version, state, server, camera, pilot, last_error]
+      required: [schema_version, state, server, camera, pilot, recording, last_error]
       properties:
         schema_version:
           const: 1
@@ -398,6 +493,8 @@ components:
               maximum: 2147483647
             last_error:
               type: [string, 'null']
+        recording:
+          $ref: '#/components/schemas/RecordingHealth'
         last_error:
           type: [string, 'null']
     MetadataResponse:
@@ -415,7 +512,7 @@ components:
         schema_version:
           const: 1
         api_version:
-          const: '1.1.0'
+          const: '1.2.0'
         device_id:
           type: string
         adapter:
@@ -436,6 +533,123 @@ components:
           uniqueItems: true
           items:
             type: string
+    RecordingRequestProfile:
+      type: object
+      additionalProperties: false
+      required: [width, height, fps, pixel_format]
+      properties:
+        width: {type: integer, minimum: 1}
+        height: {type: integer, minimum: 1}
+        fps: {type: integer, minimum: 1}
+        pixel_format:
+          const: rgb24
+    RecordingStartRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - schema_version
+        - request_id
+        - recording_id
+        - expected_device_id
+        - expected_calibration_id
+        - expected_profile
+      properties:
+        schema_version:
+          const: 1
+        request_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+        recording_id:
+          type: string
+          pattern: '^[a-z0-9][a-z0-9._-]{0,63}$'
+        expected_device_id:
+          type: string
+          minLength: 1
+        expected_calibration_id:
+          type: string
+          minLength: 1
+        expected_profile:
+          $ref: '#/components/schemas/RecordingRequestProfile'
+    RecordingStopRequest:
+      type: object
+      additionalProperties: false
+      required: [schema_version, request_id, recording_id]
+      properties:
+        schema_version:
+          const: 1
+        request_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+        recording_id:
+          type: string
+          pattern: '^[a-z0-9][a-z0-9._-]{0,63}$'
+    RecordingCommandResponse:
+      type: object
+      additionalProperties: false
+      required: [schema_version]
+      properties:
+        schema_version:
+          const: 1
+    RecordingCurrentResponse:
+      type: object
+      additionalProperties: false
+      required: [schema_version, state]
+      properties:
+        schema_version:
+          const: 1
+        state:
+          enum: [disabled, idle, preparing, recording, finalizing, finalized, faulted]
+        recording_id:
+          type: [string, 'null']
+        admitted_frame_count: {type: integer, minimum: 0}
+        submitted_frame_count: {type: integer, minimum: 0}
+        recording_drop_count: {type: integer, minimum: 0}
+        started_monotonic_ns:
+          type: [integer, 'null']
+          format: int64
+        started_unix_epoch_ns:
+          type: [integer, 'null']
+          format: int64
+        stopped_monotonic_ns:
+          type: [integer, 'null']
+          format: int64
+        stopped_unix_epoch_ns:
+          type: [integer, 'null']
+          format: int64
+        artifact_reference:
+          type: [string, 'null']
+        last_error:
+          type: [string, 'null']
+    RecordingHealth:
+      type: object
+      additionalProperties: false
+      required:
+        - enabled
+        - state
+        - recording_id
+        - queue_depth
+        - queue_capacity
+        - admitted_frame_count
+        - submitted_frame_count
+        - recording_drop_count
+        - orphan_staging_count
+        - last_error
+      properties:
+        enabled: {type: boolean}
+        state:
+          enum: [disabled, idle, preparing, recording, finalizing, finalized, faulted]
+        recording_id:
+          type: [string, 'null']
+        queue_depth: {type: integer, minimum: 0}
+        queue_capacity: {type: integer, minimum: 0}
+        admitted_frame_count: {type: integer, minimum: 0}
+        submitted_frame_count: {type: integer, minimum: 0}
+        recording_drop_count: {type: integer, minimum: 0}
+        orphan_staging_count: {type: integer, minimum: 0}
+        last_error:
+          type: [string, 'null']
     PixelRoi:
       type: object
       additionalProperties: false

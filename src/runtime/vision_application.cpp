@@ -296,6 +296,11 @@ std::string makeMetadataJson(const VisionConfig& config) {
         endpoints.emplace_back("/stream/color.mjpg");
         endpoints.emplace_back("/snapshot/color");
     }
+    if (config.recording.enabled) {
+        endpoints.emplace_back("/recordings/start");
+        endpoints.emplace_back("/recordings/stop");
+        endpoints.emplace_back("/recordings/current");
+    }
 
     boost::json::object calibration;
     calibration["calibration_id"] = config.calibration.calibration_id;
@@ -304,7 +309,7 @@ std::string makeMetadataJson(const VisionConfig& config) {
 
     boost::json::object root;
     root["schema_version"] = 1;
-    root["api_version"] = "1.1.0";
+    root["api_version"] = "1.2.0";
     root["device_id"] = config.device_id;
     root["adapter"] = config.adapter;
     root["advertised_base_url"] = config.provider.advertised_base_url;
@@ -384,7 +389,10 @@ void VisionApplication::startApplication() {
             m_p_impl->m_config.recording.root,
             static_cast<std::size_t>(m_p_impl->m_config.recording.queue_capacity_frames),
             color_profile.width, color_profile.height, color_profile.fps,
-            m_p_impl->m_config.recording.bit_rate_bps, m_p_impl->m_config.calibration.sensor_frame,
+            m_p_impl->m_config.recording.bit_rate_bps, m_p_impl->m_config.recording.max_duration_ms,
+            m_p_impl->m_config.recording.minimum_free_bytes,
+            m_p_impl->m_config.recording.finalize_timeout_ms, m_p_impl->m_config.recording.preset,
+            m_p_impl->m_config.recording.tune, m_p_impl->m_config.calibration.sensor_frame,
             m_p_impl->m_config.calibration.calibration_id, m_p_impl->m_config.component_id,
             m_p_impl->m_config.device_id, "vision-" + std::to_string(getpid())});
     }
@@ -429,19 +437,17 @@ void VisionApplication::startApplication() {
         }
         try {
             const RecordingStartRequest request = parseRecordingStopRequest(body);
-            if (m_p_impl->m_p_recording_manager->getStatus().recording_id != request.recording_id) {
-                return makeErrorResponse(404, "recording_not_found", "Recording is unknown.",
-                                         false);
-            }
             const RecordingStopResult result =
                 m_p_impl->m_p_recording_manager->finalizeOrReplay(request);
-            return ProviderHttpResponse{result == RecordingStopResult::e_FINALIZED ? 202 : 200,
+            return ProviderHttpResponse{result == RecordingStopResult::e_ACCEPTED ? 202 : 200,
                                         "application/json",
                                         "{\"schema_version\":1}",
                                         {}};
         } catch (const std::invalid_argument&) {
             return makeErrorResponse(400, "invalid_request", "Recording request is invalid.",
                                      false);
+        } catch (const RecordingNotFoundError&) {
+            return makeErrorResponse(404, "recording_not_found", "Recording is unknown.", false);
         } catch (const std::exception&) {
             return makeErrorResponse(409, "recording_conflict", "Recording cannot stop.", false);
         }

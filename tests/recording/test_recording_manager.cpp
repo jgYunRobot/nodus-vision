@@ -2,9 +2,11 @@
 
 #include <gtest/gtest.h>
 
+#include <boost/json.hpp>
 #include <chrono>
 #include <cstdlib>
 #include <filesystem>
+#include <fstream>
 #include <memory>
 #include <optional>
 #include <stdexcept>
@@ -12,6 +14,7 @@
 #include <vector>
 
 #include "recording_manager.hpp"
+#include "recording_store.hpp"
 
 namespace nodus_vision {
 namespace {
@@ -71,6 +74,11 @@ RecordingManagerConfig makeConfig(const std::filesystem::path& root) {
             64,
             30,
             100000,
+            10000,
+            1U,
+            1000,
+            "veryfast",
+            "zerolatency",
             "front_optical",
             "front_v1",
             "camera.front",
@@ -89,6 +97,24 @@ bool submitFrameEventually(RecordingManager& manager, std::uint64_t generation,
     return false;
 }
 
+bool waitForState(RecordingManager& manager, RecordingState expected) {
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+    while (std::chrono::steady_clock::now() < deadline) {
+        if (manager.getStatus().state == expected) {
+            return true;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    return manager.getStatus().state == expected;
+}
+
+boost::json::object readJsonObject(const std::filesystem::path& path) {
+    std::ifstream input(path, std::ios::in | std::ios::binary);
+    return boost::json::parse(
+               std::string(std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()))
+        .as_object();
+}
+
 }  // namespace
 
 TEST(RecordingManager, DrainsImmutableRgbFramesIntoStagingArtifact) {
@@ -98,7 +124,8 @@ TEST(RecordingManager, DrainsImmutableRgbFramesIntoStagingArtifact) {
     ASSERT_TRUE(submitFrameEventually(manager, 1U, 1U));
     EXPECT_TRUE(manager.trySubmitFrame(std::make_shared<RgbFrame>(1U, 2U)));
     EXPECT_EQ(manager.finalizeOrReplay({"stop-001", "episode-0001-front", ""}),
-              RecordingStopResult::e_FINALIZED);
+              RecordingStopResult::e_ACCEPTED);
+    manager.finalize();
     const RecordingStatus status = manager.getStatus();
     EXPECT_EQ(status.state, RecordingState::e_FINALIZED);
     EXPECT_EQ(status.admitted_frame_count, 2U);
@@ -108,6 +135,8 @@ TEST(RecordingManager, DrainsImmutableRgbFramesIntoStagingArtifact) {
     EXPECT_TRUE(std::filesystem::is_regular_file(artifact / "frames.jsonl"));
     EXPECT_TRUE(std::filesystem::is_regular_file(artifact / "recording_manifest.json"));
     EXPECT_TRUE(std::filesystem::is_regular_file(artifact / "stop_request.json"));
+    EXPECT_EQ(manager.finalizeOrReplay({"stop-001", "episode-0001-front", ""}),
+              RecordingStopResult::e_REPLAYED);
 }
 
 TEST(RecordingManager, RejectsFrameWhenNotRecording) {
@@ -165,6 +194,112 @@ TEST(RecordingManager, DropsOverflowWithoutBlockingCaptureAdmission) {
     EXPECT_EQ(status.state, RecordingState::e_FINALIZED);
     EXPECT_GT(rejected, 0U);
     EXPECT_EQ(status.recording_drop_count, rejected);
+}
+
+TEST(RecordingManager, RejectsStartBelowConfiguredFreeSpaceReserve) {
+    TemporaryRecordingDirectory directory;
+    RecordingManagerConfig config = makeConfig(directory.getPath());
+    const std::filesystem::space_info space = std::filesystem::space(directory.getPath());
+    config.minimum_free_bytes = space.available + 1U;
+    RecordingManager manager(std::move(config));
+    EXPECT_THROW(manager.start({"start-001", "episode-0001-front", ""}), std::runtime_error);
+    EXPECT_FALSE(std::filesystem::exists(directory.getPath() / ".staging" / "episode-0001-front"));
+}
+
+TEST(RecordingManager, FinalizesAutomaticallyAtConfiguredMaximumDuration) {
+    TemporaryRecordingDirectory directory;
+    RecordingManagerConfig config = makeConfig(directory.getPath());
+    config.max_duration_ms = 100;
+    RecordingManager manager(std::move(config));
+    manager.start({"start-001", "episode-0001-front", ""});
+    ASSERT_TRUE(submitFrameEventually(manager, 1U, 1U));
+    ASSERT_TRUE(waitForState(manager, RecordingState::e_FINALIZED));
+    const std::filesystem::path artifact = directory.getPath() / "finalized" / "episode-0001-front";
+    EXPECT_EQ(readJsonObject(artifact / "stop_request.json").at("stop_reason"), "max_duration");
+    const boost::json::object manifest = readJsonObject(artifact / "recording_manifest.json");
+    EXPECT_EQ(manifest.at("stop_reason"), "max_duration");
+    EXPECT_TRUE(manifest.at("stop_request_id").is_null());
+}
+
+TEST(RecordingManager, PersistsApplicationShutdownReasonWithoutInventingRequestId) {
+    TemporaryRecordingDirectory directory;
+    RecordingManager manager(makeConfig(directory.getPath()));
+    manager.start({"start-001", "episode-0001-front", ""});
+    ASSERT_TRUE(submitFrameEventually(manager, 1U, 1U));
+    manager.finalize();
+    ASSERT_EQ(manager.getStatus().state, RecordingState::e_FINALIZED);
+    const std::filesystem::path artifact = directory.getPath() / "finalized" / "episode-0001-front";
+    EXPECT_EQ(readJsonObject(artifact / "stop_request.json").at("stop_reason"),
+              "application_shutdown");
+    const boost::json::object manifest = readJsonObject(artifact / "recording_manifest.json");
+    EXPECT_EQ(manifest.at("stop_reason"), "application_shutdown");
+    EXPECT_TRUE(manifest.at("stop_request_id").is_null());
+}
+
+TEST(RecordingManager, RecoversExactRequestReplayFromFinalizedArtifactAfterRestart) {
+    TemporaryRecordingDirectory directory;
+    const RecordingStartRequest start{"start-001", "episode-0001-front", ""};
+    const RecordingStartRequest stop{"stop-001", "episode-0001-front", ""};
+    {
+        RecordingManager manager(makeConfig(directory.getPath()));
+        EXPECT_EQ(manager.startOrReplay(start), RecordingStartResult::e_STARTED);
+        ASSERT_TRUE(submitFrameEventually(manager, 1U, 1U));
+        EXPECT_EQ(manager.finalizeOrReplay(stop), RecordingStopResult::e_ACCEPTED);
+        manager.finalize();
+        ASSERT_EQ(manager.getStatus().state, RecordingState::e_FINALIZED);
+    }
+    RecordingManager recovered(makeConfig(directory.getPath()));
+    EXPECT_EQ(recovered.startOrReplay(start), RecordingStartResult::e_REPLAYED);
+    EXPECT_EQ(recovered.getStatus().state, RecordingState::e_FINALIZED);
+    EXPECT_EQ(recovered.finalizeOrReplay(stop), RecordingStopResult::e_REPLAYED);
+    EXPECT_THROW(recovered.startOrReplay({"start-002", "episode-0001-front", "{\"changed\":true}"}),
+                 std::runtime_error);
+}
+
+TEST(RecordingManager, ExposesPersistedCrashStagingAsFaultedWithoutStartingWriter) {
+    TemporaryRecordingDirectory directory;
+    const RecordingStartRequest start{"start-001", "episode-0001-front", ""};
+    RecordingStore store(directory.getPath());
+    store.createStaging(start);
+    RecordingManager recovered(makeConfig(directory.getPath()));
+    EXPECT_EQ(recovered.startOrReplay(start), RecordingStartResult::e_REPLAYED);
+    EXPECT_EQ(recovered.getStatus().state, RecordingState::e_FAULTED);
+    EXPECT_FALSE(recovered.trySubmitFrame(std::make_shared<RgbFrame>(1U, 1U)));
+    EXPECT_FALSE(std::filesystem::exists(directory.getPath() / "finalized" / "episode-0001-front"));
+}
+
+TEST(RecordingManager, IsolatesStopLedgerAndTimestampsAcrossConsecutiveRecordings) {
+    TemporaryRecordingDirectory directory;
+    RecordingManager manager(makeConfig(directory.getPath()));
+    manager.start({"start-shared", "episode-0001-front", ""});
+    ASSERT_TRUE(submitFrameEventually(manager, 1U, 1U));
+    EXPECT_EQ(manager.finalizeOrReplay({"stop-shared", "episode-0001-front", ""}),
+              RecordingStopResult::e_ACCEPTED);
+    manager.finalize();
+    ASSERT_EQ(manager.getStatus().state, RecordingState::e_FINALIZED);
+
+    EXPECT_EQ(manager.startOrReplay({"start-shared", "episode-0002-front", ""}),
+              RecordingStartResult::e_STARTED);
+    const RecordingStatus second_started = manager.getStatus();
+    EXPECT_EQ(second_started.recording_id, "episode-0002-front");
+    EXPECT_EQ(second_started.stopped_monotonic_ns, 0);
+    EXPECT_EQ(second_started.stopped_unix_epoch_ns, 0);
+    ASSERT_TRUE(submitFrameEventually(manager, 1U, 2U));
+    EXPECT_EQ(manager.finalizeOrReplay({"stop-shared", "episode-0002-front", ""}),
+              RecordingStopResult::e_ACCEPTED);
+    manager.finalize();
+
+    const boost::json::object first_manifest = readJsonObject(
+        directory.getPath() / "finalized" / "episode-0001-front" / "recording_manifest.json");
+    const boost::json::object second_manifest = readJsonObject(
+        directory.getPath() / "finalized" / "episode-0002-front" / "recording_manifest.json");
+    EXPECT_EQ(first_manifest.at("recording_id"), "episode-0001-front");
+    EXPECT_EQ(second_manifest.at("recording_id"), "episode-0002-front");
+    EXPECT_EQ(first_manifest.at("stop_request_id"), "stop-shared");
+    EXPECT_EQ(second_manifest.at("stop_request_id"), "stop-shared");
+    EXPECT_EQ(second_manifest.at("stop_reason"), "requested");
+    EXPECT_EQ(manager.finalizeOrReplay({"stop-shared", "episode-0001-front", ""}),
+              RecordingStopResult::e_REPLAYED);
 }
 
 }  // namespace nodus_vision

@@ -112,7 +112,8 @@ TEST(RecordingManifest, SerializesFinalizedIdentityCountersAndArtifactDigests) {
                                         {1U, 42U, 102, 202},
                                         true,
                                         "start-001",
-                                        "stop-001"};
+                                        "stop-001",
+                                        RecordingStopReason::e_REQUESTED};
     const RecordingArtifactDigest video{
         "color.mp4", 123U, "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"};
     const RecordingArtifactDigest sidecar{
@@ -127,6 +128,7 @@ TEST(RecordingManifest, SerializesFinalizedIdentityCountersAndArtifactDigests) {
     EXPECT_EQ(result.at("first_frame").as_object().at("frame_number").to_number<std::uint64_t>(),
               41U);
     EXPECT_EQ(result.at("artifacts").as_array().size(), 2U);
+    EXPECT_EQ(result.at("stop_reason").as_string(), "requested");
 }
 
 }  // namespace nodus_vision

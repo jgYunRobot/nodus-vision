@@ -4,6 +4,7 @@
 
 #include <cstdlib>
 #include <filesystem>
+#include <optional>
 #include <stdexcept>
 
 #include "recording_store.hpp"
@@ -38,6 +39,14 @@ TEST(RecordingStore, CreatesOneStagingIdentityWithAtomicRequestEvidence) {
     EXPECT_EQ(store.getStagingCount(), 1U);
     EXPECT_TRUE(std::filesystem::is_regular_file(paths.staging_directory / "start_request.json"));
     EXPECT_FALSE(std::filesystem::exists(paths.staging_directory / "start_request.json.tmp"));
+    const std::optional<PersistedRecordingArtifact> persisted =
+        store.findPersistedArtifact("episode-0001-front");
+    ASSERT_TRUE(persisted.has_value());
+    EXPECT_FALSE(persisted->finalized);
+    EXPECT_EQ(persisted->start_request,
+              "{\"schema_version\":1,\"request_id\":\"start-001\",\"recording_id\":\"episode-"
+              "0001-front\"}");
+    EXPECT_FALSE(persisted->stop_request.has_value());
     EXPECT_THROW(store.createStaging({"start-002", "episode-0001-front", ""}), std::runtime_error);
 }
 

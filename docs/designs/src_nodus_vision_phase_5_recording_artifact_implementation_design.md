@@ -11,7 +11,7 @@
   - `apps/pacf/camera_runtime/src/camera_runtime_color_video_writer.*`
   - `apps/pacf/camera_runtime/src/camera_runtime_app.*`
   - `docs/apps/camera_recording_design.md`
-- 상태: implementation ready after R4 gate
+- 상태: Phase 5 implementation under review; public recording contract targets Vision API 1.2.0
 
 ## 2. 목표
 
@@ -155,6 +155,14 @@ reviewed implementation 중 하나를 P5-0에서 확정한다. checksum 계산�
 - color가 disabled면 recording enabled config를 거부한다.
 - profile width/height가 YUV420P 요구처럼 even dimension인지 validation한다.
 
+runtime은 parsing한 모든 recording 설정을 `RecordingManagerConfig`와 `ColorVideoWriterConfig`로
+전달한다. start는 staging 생성 전에 root의 available bytes를 확인한다. worker는 monotonic
+`max_duration_ms` deadline에 도달하면 새 frame admission을 닫고 현재 bounded queue만 drain한 뒤
+artifact finalize를 수행한다. `finalize_timeout_ms`는 queue drain, encoder/sidecar close, checksum
+chunk 및 atomic activation 단계 사이에서 검사하며, 초과하면 finalized로 승격하지 않고 staging을
+faulted 상태로 보존한다. C++ thread가 이미 진입한 단일 FFmpeg 또는 filesystem system call 자체를
+강제 중단하지는 않으며, HTTP 비동기 finalizer 경계는 별도 review finding에서 다룬다.
+
 test config는 `mkdtemp` 아래 absolute root를 사용한다. repository working tree를 runtime artifact root로
 사용하지 않는다.
 
@@ -218,6 +226,15 @@ finalize 순서:
 어느 단계든 실패하면 directory는 `.staging`에 남고 `faulted/incomplete`로 표시한다. finalized directory를
 부분 수정하거나 rollback 목적으로 삭제하지 않는다.
 
+HTTP stop handler는 canonical stop request를 durable하게 기록하고 state를 `finalizing`으로 전이한 뒤
+worker에 signal만 보내고 즉시 `202`를 반환한다. queue drain, FFmpeg flush, checksum, manifest 및 directory
+activation은 기존 recording worker만 소유한다. 같은 stop request가 finalizing 중 재전송되면 `202`, finalize
+완료 뒤 재전송되면 `200`을 반환하며 provider I/O thread는 worker join을 수행하지 않는다.
+
+`max_duration_ms`와 application shutdown도 `stop_request.json`을 남긴다. 이 두 경로는 외부 request ID를
+만들지 않고 각각 `max_duration`, `application_shutdown` reason을 기록한다. manifest의 `stop_reason`은 실제
+종료 원인을 반영하고, 외부 stop만 non-null `stop_request_id`를 가진다.
+
 startup recovery는 `.staging`을 scan해 count와 ID만 redacted health에 표시한다. Phase 5에서는 crash
 artifact를 자동 finalize/delete하지 않는다.
 
@@ -278,6 +295,9 @@ baseline parameters:
 - GOP: one second (`fps`)
 - B-frame: 0
 - bit rate: strict config
+
+writer는 검증된 `preset`과 `tune` 문자열을 config에서 직접 받아 libx264 option으로 적용하며
+동일 값을 내부에서 다시 하드코딩하지 않는다.
 
 `writeFrame()`은 submitted `video_frame_index`와 assigned PTS를 반환한다. Sidecar line은 FFmpeg가 input
 frame을 수락한 뒤 append한다. flush/trailer가 실패하면 manifest를 finalize하지 않는다.
@@ -375,6 +395,10 @@ finalize validator:
 
 Vision OpenAPI를 additive minor version으로 갱신하고 다음 endpoint를 추가한다.
 
+Phase 5 recording endpoint와 catalog schema ID는 Vision Provider API `1.2.0`에서 함께 공개한다.
+runtime `/metadata`, Pilot component metadata 및 모든 endpoint descriptor도 동일한 API version을
+사용하며, OpenAPI contract test가 세 route와 request/response/current/health schema 존재를 검증한다.
+
 ### 14.1 start
 
 ```http
@@ -435,6 +459,12 @@ endpoint로 반환하지 않는다.
 - process crash 후 `.staging` artifact는 finalized로 가장하지 않는다. automatic salvage는 Phase 5 범위가
   아니다.
 
+재시작 뒤 exact start replay는 해당 recording ID의 persisted `start_request.json`을 bounded read해 비교한다.
+finalized artifact면 replay와 finalized state를 복구하고, staging artifact면 replay identity는 인정하되 current
+state는 `faulted`로 노출해 새 writer를 만들지 않는다. exact stop replay는 finalized artifact의 persisted
+`stop_request.json`과 byte-for-byte 비교한다. 다른 body는 conflict이며 staging artifact를 자동 재개하거나
+finalize하지 않는다. request file read는 regular non-symlink file과 bounded size만 허용한다.
+
 idempotency history는 filesystem recording identity로 bound된다. unbounded global in-memory request map을
 추가하지 않는다.
 
@@ -472,6 +502,10 @@ normal application stop:
 5. deadline/finalize failure면 staging incomplete를 보존한다.
 6. provider session/stream, encoder, camera adapter를 기존 ordered path로 종료한다.
 
+application shutdown이 active recording을 닫을 때는 `application_shutdown` stop evidence를 먼저 durable하게
+기록한다. 이미 외부 stop으로 finalizing 중이면 그 reason과 request identity를 덮어쓰지 않고 같은 worker를
+join한다.
+
 application mutex를 잡은 채 writer join, FFmpeg flush, checksum 또는 filesystem sync를 수행하지 않는다.
 
 ## 18. acceptance matrix
@@ -495,6 +529,9 @@ application mutex를 잡은 채 writer join, FFmpeg flush, checksum 또는 files
 | checksum mutation | validator rejects |
 | Pilot absent/restart | recording/data plane continues; catalog recovers only |
 | application shutdown | deadline bound; valid finalized or preserved incomplete staging |
+| provider restart exact replay | persisted request bytes로 replay; writer/finalizer 중복 없음 |
+| maximum duration | durable `max_duration` evidence와 일치하는 manifest reason |
+| consecutive recordings | stop ledger, stopped timestamps와 artifact identity가 recording마다 격리 |
 | direct MetaGate fixture | discovery then direct start/stop/current; Pilot receives no video |
 
 No test may require physical camera. FFmpeg tests use deterministic synthetic RGB frames and temporary directories.

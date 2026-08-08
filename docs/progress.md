@@ -1,5 +1,110 @@
 # Progress
 
+## 2026-08-08 - Phase 5 recording lifecycle review remediation
+
+### Changes
+
+- Changed direct recording stop to persist canonical request evidence, transition to finalizing, and
+  return without joining the recording worker. Exact retry remains accepted while finalizing and is
+  replayed after finalized activation.
+- Added bounded, regular-file-only persisted request lookup so exact start/stop replay survives a
+  Vision process restart. Incomplete staging is restored only as faulted evidence and is never
+  resumed or advertised as finalized.
+- Added explicit `requested`, `max_duration`, and `application_shutdown` stop reasons. Automatic
+  duration and shutdown paths now persist stop evidence without inventing an external request ID,
+  and manifests report the actual reason.
+- Reset stop request ledger, stop reason, counters, queue references, and stopped timestamps at each
+  new recording boundary. Added consecutive recording coverage using the same stop request ID across
+  distinct filesystem-bound recording identities.
+- Removed the in-memory-only HTTP stop precheck and mapped the manager's explicit not-found result to
+  `404`, allowing exact persisted stop replay directly after application restart.
+
+### Status
+
+- Phase 5 review findings 3 through 6 are closed in the working tree together with the prior public
+  contract and runtime-bound remediations.
+- Provider I/O no longer waits for FFmpeg flush, checksums, or artifact activation. The recording
+  worker remains the sole finalization owner.
+- A single FFmpeg or filesystem call already in progress is still not forcibly preempted; deadline
+  checks remain cooperative between bounded finalization stages as documented.
+- No physical camera or USB device was accessed, and no hardware acceptance is claimed.
+
+### Validation
+
+- `cmake --preset debug` passed.
+- `cmake --build --preset debug -j2` passed after one corrected internal-header dependency omission.
+- Focused recording/application CTest selection passed 7/7 before the final restart replay
+  refinement, and the final focused manager/application selection passed 2/2.
+- Final full `ctest --test-dir build/debug --output-on-failure` passed 24/24.
+- `recording_test_manager` and `integration_test_application_lifecycle` each passed 20 consecutive
+  repetitions after the final changes.
+- `git diff --check` passed. Formatting used the available Ubuntu clang-format 18.1.3; the repository
+  rule names 18.1.8, which is not installed in this environment.
+
+### Next goals
+
+- Review and commit the combined Phase 5 findings 1 through 6 remediation when requested.
+- Keep Phase 6 geometry, product integration, and physical D435 acceptance out of this change.
+
+## 2026-08-08 - Phase 5 recording runtime bounds remediation
+
+### Changes
+
+- Connected `max_duration_ms`, `minimum_free_bytes`, `finalize_timeout_ms`, `preset`, and `tune`
+  from the strict Vision config through the recording manager and H.264 writer.
+- Rejected recording start before staging creation when the configured free-space reserve is not
+  available, and made the worker close admission and finalize automatically at the monotonic maximum
+  duration.
+- Moved artifact finalization to the recording worker and applied the finalize deadline while
+  draining queued frames, closing writer/sidecar state, hashing bounded chunks, and activating the
+  finalized directory. Deadline failure preserves staging as faulted.
+- Added deterministic configuration/free-space coverage and bounded polling coverage for automatic
+  maximum-duration finalization.
+
+### Status
+
+- Review finding 2 settings are now consumed by their runtime owners instead of being parse-only.
+- This does not make the HTTP stop route asynchronous and does not preempt a single blocking FFmpeg
+  or filesystem call; that remains part of the separate finalization architecture review finding.
+
+### Validation
+
+- Build and CTest were not run because this focused change did not include a separate test-execution
+  instruction.
+
+### Next goals
+
+- Run the recording manager, writer, integration, and full CTest suites when explicitly requested.
+- Address asynchronous HTTP finalization independently without changing the enforced config values.
+
+## 2026-08-08 - Phase 5 public recording contract remediation
+
+### Changes
+
+- Promoted the additive Vision Provider API to `1.2.0` and added the three direct recording routes,
+  request/response/current schemas, recording health shape, and Pilot catalog schema-ID mapping to
+  the public OpenAPI artifact.
+- Aligned runtime metadata, Pilot component metadata, endpoint descriptor metadata, README, and
+  contract expectations with the same API version.
+- Added a dedicated recording OpenAPI regression check without changing recording lifecycle or
+  artifact behavior.
+
+### Status
+
+- Review finding 1, the missing public recording contract, is addressed in the working tree.
+- The remaining Phase 5 review findings are intentionally unchanged.
+
+### Validation
+
+- A read-only YAML parse confirmed API version `1.2.0` and all three recording paths.
+- `git diff --check` passed. Build and CTest were not run because this focused change did not include
+  a separate test-execution instruction.
+
+### Next goals
+
+- Review and address the remaining recording bounds, asynchronous finalization, restart idempotency,
+  shutdown evidence, and consecutive-recording isolation findings separately.
+
 ## 2026-08-08 - Phase 5 P5-7 recording acceptance and handoff
 
 ### Changes

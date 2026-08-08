@@ -5,6 +5,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <atomic>
 #include <boost/asio.hpp>
 #include <boost/beast.hpp>
@@ -216,7 +217,7 @@ TEST(VisionApplication, ServesFakeDataPlaneAndRestartsCleanly) {
         requestResponse(first_port, http::verb::get, "/metadata");
     EXPECT_NE(metadata.body().find("/stream/color.mjpg"), std::string::npos);
     EXPECT_NE(metadata.body().find("/query/roi_depth"), std::string::npos);
-    EXPECT_EQ(boost::json::parse(metadata.body()).as_object().at("api_version"), "1.1.0");
+    EXPECT_EQ(boost::json::parse(metadata.body()).as_object().at("api_version"), "1.2.0");
     const http::response<http::string_body> health =
         requestResponse(first_port, http::verb::get, "/health");
     const boost::json::object health_json = boost::json::parse(health.body()).as_object();
@@ -336,6 +337,15 @@ TEST(VisionApplication, RecordsThroughDirectHttpLifecycle) {
                     .as_object()
                     .at("enabled")
                     .as_bool());
+    const boost::json::object recording_metadata =
+        boost::json::parse(requestResponse(port, http::verb::get, "/metadata").body()).as_object();
+    EXPECT_EQ(recording_metadata.at("api_version"), "1.2.0");
+    const boost::json::array& recording_endpoints = recording_metadata.at("endpoints").as_array();
+    EXPECT_TRUE(std::any_of(recording_endpoints.begin(), recording_endpoints.end(),
+                            [](const boost::json::value& endpoint) {
+                                return endpoint.is_string() &&
+                                       endpoint.as_string() == "/recordings/start";
+                            }));
     ASSERT_TRUE(waitFor([&application]() {
         return application.getHealthSnapshot().camera.latest_identity.frame_number > 2U;
     }));
@@ -344,6 +354,14 @@ TEST(VisionApplication, RecordsThroughDirectHttpLifecycle) {
         "front\"}";
     EXPECT_EQ(requestResponse(port, http::verb::post, "/recordings/stop", stop).result(),
               http::status::accepted);
+    EXPECT_EQ(requestResponse(port, http::verb::get, "/recordings/current").result(),
+              http::status::ok);
+    ASSERT_TRUE(waitFor([port]() {
+        const http::response<http::string_body> current =
+            requestResponse(port, http::verb::get, "/recordings/current");
+        return current.result() == http::status::ok &&
+               boost::json::parse(current.body()).as_object().at("state") == "finalized";
+    }));
     EXPECT_EQ(requestResponse(port, http::verb::post, "/recordings/stop", stop).result(),
               http::status::ok);
     const std::filesystem::path artifact = root.getPath() / "finalized" / "episode-0001-front";
@@ -363,6 +381,58 @@ TEST(VisionApplication, RecordsThroughDirectHttpLifecycle) {
     EXPECT_EQ(boost::json::parse(current.body()).as_object().at("artifact_reference").as_string(),
               "finalized/episode-0001-front");
     application.stopApplication();
+
+    application.startApplication();
+    const int restarted_port = application.getBoundPort();
+    EXPECT_EQ(requestResponse(restarted_port, http::verb::post, "/recordings/stop", stop).result(),
+              http::status::ok);
+    EXPECT_EQ(
+        requestResponse(restarted_port, http::verb::post, "/recordings/start", start).result(),
+        http::status::ok);
+    EXPECT_EQ(boost::json::parse(
+                  requestResponse(restarted_port, http::verb::get, "/recordings/current").body())
+                  .as_object()
+                  .at("state"),
+              "finalized");
+    EXPECT_EQ(requestResponse(restarted_port, http::verb::post, "/recordings/stop",
+                              "{\"schema_version\":1,\"request_id\":\"missing-stop\","
+                              "\"recording_id\":\"missing-recording\"}")
+                  .result(),
+              http::status::not_found);
+    application.stopApplication();
+}
+
+TEST(VisionApplication, PersistsApplicationShutdownRecordingEvidence) {
+    TemporaryRecordingRoot root;
+    VisionApplication application(makeRecordingConfig(root.getPath()));
+    application.startApplication();
+    const int port = application.getBoundPort();
+    const std::string start =
+        "{\"schema_version\":1,\"request_id\":\"start-shutdown\",\"recording_id\":\"episode-"
+        "shutdown-front\",\"expected_device_id\":\"fake\",\"expected_calibration_id\":\"fake_"
+        "calibration\",\"expected_profile\":{\"width\":64,\"height\":64,\"fps\":30,\"pixel_"
+        "format\":\"rgb24\"}}";
+    ASSERT_EQ(requestResponse(port, http::verb::post, "/recordings/start", start).result(),
+              http::status::created);
+    ASSERT_TRUE(waitFor([&application]() {
+        return application.getHealthSnapshot().camera.latest_identity.frame_number > 2U;
+    }));
+    application.stopApplication();
+
+    const std::filesystem::path artifact = root.getPath() / "finalized" / "episode-shutdown-front";
+    std::ifstream stop_input(artifact / "stop_request.json");
+    const boost::json::object stop_evidence =
+        boost::json::parse(std::string(std::istreambuf_iterator<char>(stop_input),
+                                       std::istreambuf_iterator<char>()))
+            .as_object();
+    EXPECT_EQ(stop_evidence.at("stop_reason"), "application_shutdown");
+    std::ifstream manifest_input(artifact / "recording_manifest.json");
+    const boost::json::object manifest =
+        boost::json::parse(std::string(std::istreambuf_iterator<char>(manifest_input),
+                                       std::istreambuf_iterator<char>()))
+            .as_object();
+    EXPECT_EQ(manifest.at("stop_reason"), "application_shutdown");
+    EXPECT_TRUE(manifest.at("stop_request_id").is_null());
 }
 
 }  // namespace nodus_vision

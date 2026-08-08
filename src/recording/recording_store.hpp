@@ -4,6 +4,7 @@
 #define NODUS_VISION_RECORDING_STORE_HPP_
 
 #include <filesystem>
+#include <optional>
 #include <string>
 
 #include "recording_contracts.hpp"
@@ -14,6 +15,14 @@ namespace nodus_vision {
 struct RecordingArtifactPaths {
     std::filesystem::path staging_directory;
     std::filesystem::path finalized_directory;
+};
+
+/** @brief restart replay 판정에 필요한 bounded persisted request evidence다. */
+struct PersistedRecordingArtifact {
+    RecordingArtifactPaths paths;
+    bool finalized{false};
+    std::string start_request;
+    std::optional<std::string> stop_request;
 };
 
 /** @brief config-owned artifact root의 safe staging/finalized layout owner다. */
@@ -34,6 +43,9 @@ class RecordingStore {
     void writeFinalizedManifest(const RecordingArtifactPaths& paths, const std::string& contents);
     /** @brief crash recovery를 위해 finalized로 노출하지 않은 staging count를 반환한다. */
     std::size_t getStagingCount() const;
+    /** @brief recording identity의 persisted request evidence를 안전하게 읽는다. */
+    std::optional<PersistedRecordingArtifact> findPersistedArtifact(
+        const std::string& recording_id) const;
 
    private:
     std::filesystem::path m_root;

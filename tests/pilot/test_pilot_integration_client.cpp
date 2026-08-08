@@ -225,7 +225,7 @@ TEST(PilotIntegrationClient, UsesOneSequenceForStateHeartbeatAndBoundedDisconnec
                   .at("metadata")
                   .as_object()
                   .at("provider_api_version"),
-              "1.1.0");
+              "1.2.0");
     EXPECT_EQ(requests.back().first, "/api/v1/components/opaque%2Fsession%20secret/disconnect");
     std::uint64_t previous_sequence = 0U;
     for (const auto& request : requests) {

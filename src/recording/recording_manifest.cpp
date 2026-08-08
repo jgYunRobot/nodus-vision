@@ -37,8 +37,9 @@ boost::json::object serializeFrameIdentity(const FrameIdentity& identity) {
 
 }  // namespace
 
-RecordingArtifactDigest calculateRecordingArtifactDigest(const std::filesystem::path& root,
-                                                         const std::string& relative_path) {
+RecordingArtifactDigest calculateRecordingArtifactDigest(
+    const std::filesystem::path& root, const std::string& relative_path,
+    std::optional<std::chrono::steady_clock::time_point> deadline) {
     const std::filesystem::path relative(relative_path);
     const std::filesystem::path path = root / relative;
     if (relative.empty() || relative.is_absolute() || relative.has_parent_path() ||
@@ -54,6 +55,10 @@ RecordingArtifactDigest calculateRecordingArtifactDigest(const std::filesystem::
     }
     std::array<std::uint8_t, 65536U> buffer{};
     while (input.good()) {
+        if (deadline.has_value() && std::chrono::steady_clock::now() >= *deadline) {
+            av_freep(&p_sha);
+            throw std::runtime_error("Recording artifact digest exceeded finalize timeout.");
+        }
         input.read(reinterpret_cast<char*>(buffer.data()), buffer.size());
         const std::streamsize size = input.gcount();
         if (size > 0) {
@@ -139,7 +144,7 @@ std::string serializeFinalizedRecordingManifest(const FinalizedRecordingManifest
     root["stop_request_id"] = manifest.stop_request_id.empty()
                                   ? boost::json::value(nullptr)
                                   : boost::json::value(manifest.stop_request_id);
-    root["stop_reason"] = "requested";
+    root["stop_reason"] = getRecordingStopReasonName(manifest.stop_reason);
     return boost::json::serialize(root);
 }
 

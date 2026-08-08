@@ -8,6 +8,7 @@
 #include <filesystem>
 #include <memory>
 #include <nodus_vision/camera_adapter.hpp>
+#include <stdexcept>
 #include <string>
 
 #include "recording_contracts.hpp"
@@ -21,6 +22,11 @@ struct RecordingManagerConfig {
     int height{0};
     int fps{0};
     int bit_rate_bps{0};
+    int max_duration_ms{0};
+    std::uint64_t minimum_free_bytes{0U};
+    int finalize_timeout_ms{0};
+    std::string preset;
+    std::string tune;
     std::string sensor_frame;
     std::string calibration_id;
     std::string component_id;
@@ -45,7 +51,13 @@ struct RecordingStatus {
 };
 
 enum class RecordingStartResult { e_STARTED, e_REPLAYED };
-enum class RecordingStopResult { e_FINALIZED, e_REPLAYED };
+enum class RecordingStopResult { e_ACCEPTED, e_REPLAYED };
+
+/** @brief requested recording identity가 active/persisted storage에 없음을 나타낸다. */
+class RecordingNotFoundError final : public std::runtime_error {
+   public:
+    explicit RecordingNotFoundError(const std::string& message) : std::runtime_error(message) {}
+};
 
 /** @brief capture path와 FFmpeg writer를 bounded queue로 분리하는 sole lifecycle owner다. */
 class RecordingManager {
@@ -61,9 +73,9 @@ class RecordingManager {
     RecordingStartResult startOrReplay(const RecordingStartRequest& request);
     /** @brief capture thread를 기다리지 않고 immutable frame을 admission한다. */
     bool trySubmitFrame(std::shared_ptr<const CapturedFrame> frame) noexcept;
-    /** @brief admission을 닫고 bounded queue를 drain한 staging artifact를 close한다. */
+    /** @brief application shutdown 근거를 기록하고 worker finalize 완료를 기다린다. */
     void finalize();
-    /** @brief exact stop replay를 distinguish하며 staging writer를 close한다. */
+    /** @brief stop을 durable하게 수락하고 worker에 비동기 finalize를 요청한다. */
     RecordingStopResult finalizeOrReplay(const RecordingStartRequest& request);
     /** @return recording owner의 consistent public counters다. */
     RecordingStatus getStatus() const;

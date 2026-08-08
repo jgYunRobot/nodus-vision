@@ -6,11 +6,15 @@
 #ifndef NODUS_VISION_RECORDING_RECORDING_MANIFEST_HPP_
 #define NODUS_VISION_RECORDING_RECORDING_MANIFEST_HPP_
 
+#include <chrono>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <nodus_vision/camera_contracts.hpp>
+#include <optional>
 #include <string>
+
+#include "recording_contracts.hpp"
 
 namespace nodus_vision {
 
@@ -51,11 +55,13 @@ struct FinalizedRecordingManifest {
     bool has_frames{false};
     std::string start_request_id;
     std::string stop_request_id;
+    RecordingStopReason stop_reason{RecordingStopReason::e_APPLICATION_SHUTDOWN};
 };
 
 /** @brief regular non-symlink file의 bounded SHA-256 metadata를 계산한다. */
-RecordingArtifactDigest calculateRecordingArtifactDigest(const std::filesystem::path& root,
-                                                         const std::string& relative_path);
+RecordingArtifactDigest calculateRecordingArtifactDigest(
+    const std::filesystem::path& root, const std::string& relative_path,
+    std::optional<std::chrono::steady_clock::time_point> deadline = std::nullopt);
 /** @brief immutable finalized manifest를 compact JSON으로 serialize한다. */
 std::string serializeFinalizedRecordingManifest(const FinalizedRecordingManifest& manifest,
                                                 const RecordingArtifactDigest& video,

@@ -10,6 +10,7 @@
 #include <filesystem>
 #include <memory>
 #include <nodus_vision/camera_contracts.hpp>
+#include <string>
 
 namespace nodus_vision {
 
@@ -20,6 +21,8 @@ struct ColorVideoWriterConfig {
     int height{0};
     int fps{0};
     int bit_rate_bps{0};
+    std::string preset;
+    std::string tune;
 };
 
 /** @brief worker-owned RGB24-to-YUV420P H.264 MP4 writer다. */
