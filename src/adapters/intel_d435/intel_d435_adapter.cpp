@@ -9,6 +9,7 @@
 #include <memory>
 #include <mutex>
 #include <stdexcept>
+#include <string>
 #include <utility>
 
 #include <librealsense2/rs.hpp>
@@ -55,13 +56,22 @@ CameraIntrinsics toIntrinsics(const rs2::video_frame& frame)
     return {source.width, source.height, source.fx, source.fy, source.ppx, source.ppy, DistortionModel::e_UNKNOWN, {source.coeffs[0], source.coeffs[1], source.coeffs[2], source.coeffs[3], source.coeffs[4]}};
 }
 
+bool isValidRgbFrame(const rs2::video_frame& frame)
+{
+    return frame && frame.get_width() > 0 && frame.get_height() > 0 &&
+           frame.get_profile().format() == RS2_FORMAT_RGB8 &&
+           frame.get_stride_in_bytes() >= frame.get_width() * 3 && frame.get_data() != nullptr;
+}
+
 class IntelD435CapturedFrame final : public CapturedFrame,
                                      public std::enable_shared_from_this<IntelD435CapturedFrame> {
 public:
-    IntelD435CapturedFrame(FrameSnapshot snapshot, rs2::depth_frame depth_frame, rs2::video_frame color_frame)
+    IntelD435CapturedFrame(FrameSnapshot snapshot, rs2::depth_frame depth_frame,
+                           rs2::video_frame color_frame, rs2::video_frame depth_preview_frame)
         : m_snapshot(std::move(snapshot)),
           m_depth_frame(std::move(depth_frame)),
-          m_color_frame(std::move(color_frame))
+          m_color_frame(std::move(color_frame)),
+          m_depth_preview_frame(std::move(depth_preview_frame))
     {
     }
 
@@ -76,7 +86,18 @@ public:
         return VideoFrameView{m_color_frame.get_width(), m_color_frame.get_height(), m_color_frame.get_stride_in_bytes(), toPixelFormat(m_color_frame.get_profile().format()), std::shared_ptr<const void>(owner, static_cast<const void*>(this)), static_cast<const std::uint8_t*>(m_color_frame.get_data()), m_snapshot.identity};
     }
 
-    std::optional<VideoFrameView> getDepthPreviewFrameView() const override { return std::nullopt; }
+    std::optional<VideoFrameView> getDepthPreviewFrameView() const override
+    {
+        if (!isValidRgbFrame(m_depth_preview_frame)) {
+            return std::nullopt;
+        }
+        const std::shared_ptr<const IntelD435CapturedFrame> owner = shared_from_this();
+        return VideoFrameView{m_depth_preview_frame.get_width(), m_depth_preview_frame.get_height(),
+                              m_depth_preview_frame.get_stride_in_bytes(), PixelFormat::e_RGB8,
+                              std::shared_ptr<const void>(owner, static_cast<const void*>(this)),
+                              static_cast<const std::uint8_t*>(m_depth_preview_frame.get_data()),
+                              m_snapshot.identity};
+    }
 
     std::optional<PixelPointResult> queryPixelPoint(int pixel_x, int pixel_y) const override
     {
@@ -131,6 +152,7 @@ private:
     FrameSnapshot m_snapshot;
     rs2::depth_frame m_depth_frame;
     rs2::video_frame m_color_frame;
+    rs2::video_frame m_depth_preview_frame;
 };
 
 } // namespace
@@ -157,6 +179,7 @@ public:
     mutable std::mutex m_mutex;
     rs2::context m_context;
     std::unique_ptr<rs2::pipeline> m_p_pipeline;
+    rs2::colorizer m_depth_colorizer;
     std::string m_selected_serial;
     CameraHealthSnapshot m_health;
     bool m_connected{false};
@@ -245,6 +268,21 @@ std::shared_ptr<const CapturedFrame> IntelD435Adapter::readFrame(std::chrono::mi
         const rs2::frameset frameset = m_p_impl->m_p_pipeline->wait_for_frames(static_cast<unsigned int>(timeout.count()));
         const rs2::depth_frame depth_frame = frameset.get_depth_frame();
         const rs2::video_frame color_frame = frameset.get_color_frame();
+        rs2::video_frame depth_preview_frame(rs2::frame{});
+        try {
+            depth_preview_frame = m_p_impl->m_depth_colorizer.colorize(depth_frame).as<rs2::video_frame>();
+            if (!isValidRgbFrame(depth_preview_frame)) {
+                depth_preview_frame = rs2::video_frame(rs2::frame{});
+                m_p_impl->m_health.last_diagnostic =
+                    "Intel D435 depth preview colorization produced an invalid RGB8 frame.";
+            }
+        } catch (const rs2::error& error) {
+            m_p_impl->m_health.last_diagnostic =
+                std::string("Intel D435 depth preview colorization failed: ") + error.what();
+        } catch (const std::exception& error) {
+            m_p_impl->m_health.last_diagnostic =
+                std::string("Intel D435 depth preview colorization failed: ") + error.what();
+        }
         FrameSnapshot snapshot;
         snapshot.identity = {m_p_impl->m_capture_generation, depth_frame.get_frame_number(), 0, 0, depth_frame.get_timestamp(), toTimestampDomain(depth_frame.get_frame_timestamp_domain())};
         snapshot.depth_profile = toStreamProfile(depth_frame);
@@ -253,7 +291,8 @@ std::shared_ptr<const CapturedFrame> IntelD435Adapter::readFrame(std::chrono::mi
         snapshot.has_color = static_cast<bool>(color_frame);
         if (color_frame) { snapshot.color_profile = toStreamProfile(color_frame); snapshot.color_intrinsics = toIntrinsics(color_frame); }
         m_p_impl->m_health.latest_identity = snapshot.identity;
-        return std::make_shared<IntelD435CapturedFrame>(std::move(snapshot), depth_frame, color_frame);
+        return std::make_shared<IntelD435CapturedFrame>(std::move(snapshot), depth_frame, color_frame,
+                                                         depth_preview_frame);
     } catch (const rs2::error& error) {
         ++m_p_impl->m_health.timeout_count;
         m_p_impl->m_health.last_diagnostic = error.what();

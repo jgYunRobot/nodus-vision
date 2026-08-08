@@ -1,5 +1,36 @@
 # Progress
 
+## 2026-08-09 - D435 immutable Depth preview frame
+
+### Changes
+
+- Added one adapter-owned `rs2::colorizer` and colorized each captured Z16 Depth frame while the
+  existing capture mutex is held.
+- Stored the optional colorized `rs2::video_frame` in `IntelD435CapturedFrame` and return its
+  strict RGB8 `VideoFrameView` with the original Depth capture identity and aliasing frame owner.
+- Kept colorizer exceptions and invalid colorizer output isolated to the presentation preview;
+  raw Depth, Color, and pixel-query publication continue for that capture.
+
+### Status
+
+- DP1 is implemented without changes to public headers, config/schema/version, Pilot, or Portal.
+- No per-frame colorizer construction or adapter-global latest preview buffer was added.
+
+### Validation
+
+- Debug targets `adapter_test_intel_d435`, `provider_test_jpeg_encoder`,
+  `integration_test_application_lifecycle`, `pilot_test_vision_endpoint_catalog`, and
+  `provider_test_http_server` built successfully.
+- The same five hardware-independent CTests passed outside the sandbox: 5/5. The initial
+  sandboxed run was blocked from opening loopback sockets and librealsense udev monitoring.
+- The D435 target emits existing third-party librealsense warnings; the project source compiled
+  without new diagnostics.
+
+### Next goals
+
+- Commit DP1, then commit the DP2 fake-depth snapshot/JPEG/MJPEG and catalog regressions.
+- Run the complete hardware-independent build and CTest suite before physical D435 acceptance.
+
 ## 2026-08-09 - Intel D435 Depth preview implementation design
 
 ### Changes
