@@ -1,5 +1,48 @@
 # Progress
 
+## 2026-08-08 - Phase 6 camera mount geometry acceptance
+
+### Changes
+
+- Completed M6-0 through M6-5 with isolated commits: strict config v1 now accepts only
+  `mount_local_transform`, Vision normalizes the fixed `T_mount_camera_optical` matrix once, and
+  `mount_link_id` and the legacy matrix input are rejected.
+- Added the independent C++17 geometry library for the PA-CONTROL optical convention
+  `(x, y, z) -> (x, z, -y)` and row-major static mount matrix. JSON pixel/ROI responses preserve
+  raw camera points and add matching static mount points and geometry metadata.
+- Kept PCD1 v2 and raw optical point bytes unchanged while populating its existing matrix3x4 slot;
+  the decoder preserves and validates the static rigid transform.
+- Published Vision API 1.3.0 metadata and `X-Nodus-Mount-Frame`; Pilot catalog/registration carries
+  only direct endpoint discovery plus static geometry metadata, never image or point payload bytes.
+- Added consumer fixtures for a static point and two dynamic mount poses, with tests that detect
+  optical remap, static translation, or dynamic pose being applied more than once.
+
+### Status
+
+- Phase 6 is complete through static camera-optical-to-mount geometry. Vision keeps raw capture,
+  preview, point-cloud, and recording ownership; capture-time mount-to-root composition remains a
+  future consumer responsibility using public RobotStatus history/skew evidence.
+- Config schema remains version 1, no `/geometry` route, `output_frame` parameter, PCD1 v3,
+  Control IPC/UDS path, mutable `/reference_frame`, Portal product integration, or physical camera
+  or robot execution was added.
+
+### Validation
+
+- `cmake --preset debug` and `cmake --build --preset debug -j2` passed. The build emitted existing
+  third-party librealsense warnings only.
+- Full `ctest --test-dir build/debug --output-on-failure` passed 25/25.
+- `ctest --test-dir build/debug --output-on-failure --repeat until-fail:20 -R
+  'geometry|query_serializer|pcd1|application_lifecycle'` passed all four selected tests for 20
+  consecutive runs.
+- `git diff --check` passed. All acceptance used fake cameras and fake/loopback Pilot only; no
+  physical camera, robot, USB, Control IPC, or UDS was accessed.
+
+### Next goals
+
+- Stop at the Phase 6 static contract. Before a Phase 7 Portal/Policy moving-camera product
+  integration, define RobotStatus frame identity/history, capture-to-status skew, and interpolation
+  evidence at the consumer boundary.
+
 ## 2026-08-08 - Phase 6 camera mount geometry design correction
 
 ### Changes
