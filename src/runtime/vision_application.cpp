@@ -516,8 +516,10 @@ void VisionApplication::startApplication() {
             return makeErrorResponse(503, "no_fresh_frame", "No captured frame is available.",
                                      true);
         }
-        const PointCloudSnapshot cloud =
+        PointCloudSnapshot cloud =
             frame->buildPointCloudSnapshot(POINTCLOUD_MAX_POINTS, POINTCLOUD_STRIDE_PIXELS);
+        cloud.mount_from_camera_optical_matrix3x4 =
+            buildMountFromCameraMatrix3x4(m_p_impl->m_camera_mount_transform);
         const std::vector<std::uint8_t> bytes = writePcd1V2(cloud);
         return ProviderHttpResponse{
             200, "application/octet-stream", std::string(bytes.begin(), bytes.end()),

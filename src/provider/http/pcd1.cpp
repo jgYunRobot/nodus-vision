@@ -18,6 +18,7 @@ namespace {
 constexpr std::size_t HEADER_SIZE = 112U;
 constexpr std::size_t POINT_SIZE = 15U;
 constexpr std::uint32_t FORMAT_VERSION = 2U;
+constexpr float MATRIX_TOLERANCE = 1.0e-5F;
 
 static_assert(sizeof(float) == 4U && std::numeric_limits<float>::is_iec559,
               "PCD1 v2 requires IEEE-754 binary32 float.");
@@ -99,6 +100,32 @@ void validatePointCloud(const PointCloudSnapshot& snapshot) {
             }
         }
     }
+    for (const float value : snapshot.mount_from_camera_optical_matrix3x4) {
+        if (!std::isfinite(value)) {
+            throw std::invalid_argument("PCD1 mount matrix value must be finite.");
+        }
+    }
+    for (int row = 0; row < 3; ++row) {
+        for (int column = 0; column < 3; ++column) {
+            float dot_product = 0.0F;
+            for (int index = 0; index < 3; ++index) {
+                dot_product += snapshot.mount_from_camera_optical_matrix3x4.at(row * 4 + index) *
+                               snapshot.mount_from_camera_optical_matrix3x4.at(column * 4 + index);
+            }
+            const float expected = row == column ? 1.0F : 0.0F;
+            if (std::abs(dot_product - expected) > MATRIX_TOLERANCE) {
+                throw std::invalid_argument("PCD1 mount matrix rotation is not orthonormal.");
+            }
+        }
+    }
+    const std::array<float, 12>& matrix = snapshot.mount_from_camera_optical_matrix3x4;
+    const float determinant =
+        matrix.at(0) * (matrix.at(5) * matrix.at(10) - matrix.at(6) * matrix.at(9)) -
+        matrix.at(1) * (matrix.at(4) * matrix.at(10) - matrix.at(6) * matrix.at(8)) +
+        matrix.at(2) * (matrix.at(4) * matrix.at(9) - matrix.at(5) * matrix.at(8));
+    if (std::abs(determinant - 1.0F) > MATRIX_TOLERANCE) {
+        throw std::invalid_argument("PCD1 mount matrix rotation determinant is invalid.");
+    }
 }
 
 }  // namespace
@@ -121,8 +148,8 @@ std::vector<std::uint8_t> writePcd1V2(const PointCloudSnapshot& snapshot) {
     appendFloat32(output, snapshot.source_intrinsics.fy);
     appendFloat32(output, snapshot.source_intrinsics.ppx);
     appendFloat32(output, snapshot.source_intrinsics.ppy);
-    for (int matrix_index = 0; matrix_index < 12; ++matrix_index) {
-        appendFloat32(output, matrix_index % 5 == 0 ? 1.0F : 0.0F);
+    for (const float value : snapshot.mount_from_camera_optical_matrix3x4) {
+        appendFloat32(output, value);
     }
     for (const PointCloudPoint& point : snapshot.points) {
         appendFloat32(output, point.optical_point_m.at(0));
@@ -159,8 +186,8 @@ PointCloudSnapshot readPcd1V2(const std::vector<std::uint8_t>& input) {
     snapshot.source_intrinsics.fy = readFloat32(input, offset);
     snapshot.source_intrinsics.ppx = readFloat32(input, offset);
     snapshot.source_intrinsics.ppy = readFloat32(input, offset);
-    for (int matrix_index = 0; matrix_index < 12; ++matrix_index) {
-        (void)readFloat32(input, offset);
+    for (float& value : snapshot.mount_from_camera_optical_matrix3x4) {
+        value = readFloat32(input, offset);
     }
 
     const std::size_t expected_size =

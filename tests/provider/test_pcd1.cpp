@@ -27,6 +27,8 @@ PointCloudSnapshot makePointCloud() {
     snapshot.source_intrinsics.ppy = 1.5F;
     snapshot.requested_stride_pixels = 1;
     snapshot.stride_pixels = 2;
+    snapshot.mount_from_camera_optical_matrix3x4 = {1.0F, 0.0F, 0.0F, 0.0F,  0.0F, 0.0F,
+                                                    1.0F, 0.0F, 0.0F, -1.0F, 0.0F, 0.06F};
     snapshot.points.push_back({{1.0F, 2.0F, 3.0F}, {4U, 5U, 6U}});
     return snapshot;
 }
@@ -50,6 +52,8 @@ TEST(Pcd1, WritesExactLittleEndianHeaderAndRoundTrips) {
     ASSERT_EQ(decoded.points.size(), 1U);
     EXPECT_FLOAT_EQ(decoded.points.at(0).optical_point_m.at(2), 3.0F);
     EXPECT_EQ(decoded.points.at(0).color_rgb.at(1), 5U);
+    EXPECT_EQ(decoded.mount_from_camera_optical_matrix3x4,
+              makePointCloud().mount_from_camera_optical_matrix3x4);
 }
 
 TEST(Pcd1, RejectsMalformedAndUnboundedPayloads) {
@@ -70,6 +74,16 @@ TEST(Pcd1, RejectsMalformedAndUnboundedPayloads) {
     invalid = makePointCloud();
     invalid.points.at(0).optical_point_m.at(0) = std::numeric_limits<float>::quiet_NaN();
     EXPECT_THROW(writePcd1V2(invalid), std::invalid_argument);
+    invalid = makePointCloud();
+    invalid.mount_from_camera_optical_matrix3x4.at(0) = 2.0F;
+    EXPECT_THROW(writePcd1V2(invalid), std::invalid_argument);
+
+    std::vector<std::uint8_t> invalid_matrix = bytes;
+    invalid_matrix.at(64) = 0U;
+    invalid_matrix.at(65) = 0U;
+    invalid_matrix.at(66) = 0xC0U;
+    invalid_matrix.at(67) = 0x7FU;
+    EXPECT_THROW(readPcd1V2(invalid_matrix), std::invalid_argument);
 }
 
 }  // namespace nodus_vision

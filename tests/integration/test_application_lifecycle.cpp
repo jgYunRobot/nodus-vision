@@ -19,6 +19,7 @@
 #include <string>
 #include <thread>
 
+#include "pcd1.hpp"
 #include "vision_application.hpp"
 
 namespace nodus_vision {
@@ -253,6 +254,15 @@ TEST(VisionApplication, ServesFakeDataPlaneAndRestartsCleanly) {
     EXPECT_EQ(query_json.at("geometry").as_object().at("mount_frame"), "fake_mount");
     EXPECT_TRUE(query_json.if_contains("point_camera_m") != nullptr);
     EXPECT_TRUE(query_json.if_contains("point_mount_m") != nullptr);
+    const http::response<http::string_body> pointcloud =
+        requestResponse(first_port, http::verb::get, "/snapshot/pointcloud.bin");
+    ASSERT_EQ(pointcloud.result(), http::status::ok);
+    EXPECT_EQ(pointcloud["X-Nodus-Mount-Frame"], "fake_mount");
+    const PointCloudSnapshot decoded_pointcloud =
+        readPcd1V2(std::vector<std::uint8_t>(pointcloud.body().begin(), pointcloud.body().end()));
+    EXPECT_NEAR(decoded_pointcloud.mount_from_camera_optical_matrix3x4.at(11), 0.06F, 1.0e-6F);
+    EXPECT_NEAR(decoded_pointcloud.mount_from_camera_optical_matrix3x4.at(6), 1.0F, 1.0e-6F);
+    EXPECT_NEAR(decoded_pointcloud.mount_from_camera_optical_matrix3x4.at(9), -1.0F, 1.0e-6F);
     const http::response<http::string_body> invalid_query = requestResponse(
         first_port, http::verb::post, "/query/pixel_to_point", "{\"x\":99,\"y\":1}");
     EXPECT_EQ(invalid_query.result(), http::status::bad_request);

@@ -162,6 +162,8 @@ struct PointCloudSnapshot {
     CameraIntrinsics source_intrinsics;
     int requested_stride_pixels{1};
     int stride_pixels{1};
+    std::array<float, 12> mount_from_camera_optical_matrix3x4{1.0F, 0.0F, 0.0F, 0.0F, 0.0F, 1.0F,
+                                                              0.0F, 0.0F, 0.0F, 0.0F, 1.0F, 0.0F};
     std::vector<PointCloudPoint> points;
 };
 
@@ -177,6 +179,6 @@ struct CameraHealthSnapshot {
     std::string last_diagnostic;
 };
 
-} // namespace nodus_vision
+}  // namespace nodus_vision
 
-#endif // NODUS_VISION_CAMERA_CONTRACTS_HPP_
+#endif  // NODUS_VISION_CAMERA_CONTRACTS_HPP_
