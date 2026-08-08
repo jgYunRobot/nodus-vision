@@ -391,6 +391,8 @@ target baseline으로 사용하지 않는다.
 
 - `mount_local_transform`은 versioned calibration config이며 translation/Euler를 startup에서 canonical
   `T_mount_camera_optical` matrix로 한 번 정규화한다.
+- translation 단위는 meter, Euler `r1/r2/r3` 단위는 radian이다. `euler_type=A1A2A3`의 rotation은
+  `R_A1(r1) * R_A2(r2) * R_A3(r3)`이며 PA-CONTROL nodus_rm convention과 같아야 한다.
 - PA-CONTROL의 `optical(x,y,z) -> body(x,z,-y)` convention은 canonical matrix에 한 번 합성한다.
 - point-cloud payload는 raw optical point와 transform metadata를 명확히 구분한다.
 - Portal은 optical remap을 별도로 반복하지 않고 public matrix를 정확히 한 번 적용한다.

@@ -742,7 +742,11 @@ components:
         geometry:
           $ref: '#/components/schemas/CameraMountGeometry'
         median_point_mount_m:
-          $ref: '#/components/schemas/Point3'
+          allOf:
+            - $ref: '#/components/schemas/Point3'
+          description: >-
+            Median point in mount_frame coordinates, in meters. This applies only the immutable
+            camera optical-to-mount transform; it is not a robot base or world point.
     PixelPointRequest:
       type: object
       additionalProperties: false
@@ -776,7 +780,12 @@ components:
         point_camera_m:
           $ref: '#/components/schemas/Point3'
         point_mount_m:
-          $ref: '#/components/schemas/Point3'
+          allOf:
+            - $ref: '#/components/schemas/Point3'
+          description: >-
+            Point in mount_frame coordinates, in meters. This applies only the immutable camera
+            optical-to-mount transform; a timestamp-aware consumer separately applies the dynamic
+            root-from-mount pose for robot base or world coordinates.
         reason:
           type: string
     Point3:
@@ -789,6 +798,10 @@ components:
         z: {type: number}
     CameraMountGeometry:
       type: object
+      description: >-
+        Immutable static camera optical-to-mount geometry. With homogeneous column vectors,
+        p_mount = T_mount_camera_optical * p_camera_optical. Dynamic robot or world transforms are
+        intentionally not included.
       additionalProperties: false
       required: [calibration_id, sensor_frame, mount_frame, mount_from_camera_optical_matrix4x4]
       properties:
@@ -797,6 +810,9 @@ components:
         mount_frame: {type: string}
         mount_from_camera_optical_matrix4x4:
           type: array
+          description: >-
+            Row-major homogeneous 4x4 rigid transform from sensor_frame camera optical coordinates
+            to mount_frame coordinates. Translation entries and input/output points use meters.
           minItems: 16
           maxItems: 16
           items: {type: number}

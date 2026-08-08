@@ -6,5 +6,6 @@ must produce the listed root points; reapplying the optical remap or static tran
 cases.
 
 `pointcloud_pcd1_v2_camera_mount_expected.json` describes the PCD1 v2 golden point/matrix pair.
-`provider_test_pcd1` serializes the same fixed values and rejects trailing or substituted bytes
-without changing the version-2 layout.
+`pointcloud_pcd1_v2_camera_mount.bin` is the immutable 127-byte wire fixture generated from that
+description. `provider_test_pcd1` reads both files, requires exact encoded-byte equality, decodes the
+binary fixture, and rejects trailing or substituted bytes without changing the version-2 layout.

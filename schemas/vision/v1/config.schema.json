@@ -148,16 +148,20 @@
     },
     "mount_local_transform": {
       "type": "object",
+      "description": "Fixed camera-body pose in mount_frame coordinates. Translation is meters. Euler angles are radians and compose as R_A1(r1) * R_A2(r2) * R_A3(r3) for euler_type=A1A2A3, matching PA-CONTROL nodus_rm semantics.",
       "additionalProperties": false,
       "required": ["x", "y", "z", "r1", "r2", "r3", "euler_type"],
       "properties": {
-        "x": {"type": "number", "minimum": -10, "maximum": 10},
-        "y": {"type": "number", "minimum": -10, "maximum": 10},
-        "z": {"type": "number", "minimum": -10, "maximum": 10},
-        "r1": {"type": "number"},
-        "r2": {"type": "number"},
-        "r3": {"type": "number"},
-        "euler_type": {"enum": ["XYZ", "XZY", "YXZ", "YZX", "ZXY", "ZYX", "ZXZ", "ZYZ"]}
+        "x": {"type": "number", "minimum": -10, "maximum": 10, "description": "Translation along the mount-frame x axis in meters."},
+        "y": {"type": "number", "minimum": -10, "maximum": 10, "description": "Translation along the mount-frame y axis in meters."},
+        "z": {"type": "number", "minimum": -10, "maximum": 10, "description": "Translation along the mount-frame z axis in meters."},
+        "r1": {"type": "number", "description": "First Euler rotation angle in radians."},
+        "r2": {"type": "number", "description": "Second Euler rotation angle in radians."},
+        "r3": {"type": "number", "description": "Third Euler rotation angle in radians."},
+        "euler_type": {
+          "enum": ["XYZ", "XZY", "YXZ", "YZX", "ZXY", "ZYX", "ZXZ", "ZYZ"],
+          "description": "Axis sequence A1A2A3 for R_A1(r1) * R_A2(r2) * R_A3(r3)."
+        }
       }
     },
     "fake_device": {

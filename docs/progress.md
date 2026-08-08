@@ -1,5 +1,44 @@
 # Progress
 
+## 2026-08-08 - Phase 6 review findings 1-3 remediation
+
+### Changes
+
+- Defined `mount_local_transform` translation as meters and Euler angles as radians in the Phase 6
+  design and config schema. Documented the PA-CONTROL/nodus_rm-compatible
+  `R_A1(r1) * R_A2(r2) * R_A3(r3)` composition and added a non-zero XYZ golden parity test.
+- Made the Vision 1.3 OpenAPI geometry contract self-contained: mount points are meters, the matrix
+  is row-major homogeneous 4x4, `p_mount = T_mount_camera_optical * p_camera_optical`, and dynamic
+  robot base/world composition remains a timestamp-aware consumer responsibility.
+- Added the missing immutable 127-byte PCD1 v2 binary fixture. The provider test now reads the
+  expected JSON and committed binary directly, verifies exact encoded bytes, decodes the binary,
+  and checks the raw point, RGB, matrix, and expected mount point together.
+- Left review finding 4 unchanged pending a contract decision for invalid ROI output.
+
+### Status
+
+- Review findings 1, 2, and 3 are remediated in the working tree. No runtime route, transform
+  behavior, PCD1 layout/version, Pilot contract, recording behavior, or Phase 7 feature changed.
+- The existing implementation already used radians and the documented multiplication order; this
+  change closes the public-contract ambiguity and adds regression evidence rather than changing the
+  computed transform.
+
+### Validation
+
+- Confirmed the committed binary fixture is exactly 127 bytes and inspected its PCD1 v2 header,
+  static matrix, raw optical point, and RGB bytes.
+- `git diff --check` and `jq empty` syntax checks for the changed JSON files passed.
+- Build and CTest were not run because this remediation request did not explicitly authorize test
+  execution. The required clang-format 18.1.8 is unavailable; the host provides 18.1.3, so no
+  different formatter version was applied.
+
+### Next goals
+
+- Decide whether invalid ROI responses omit/null median point fields or retain required zero/default
+  points guarded only by `stats.valid`.
+- After that decision, run the focused geometry/PCD1/query tests and full CTest when explicitly
+  authorized, then commit the review remediation if requested.
+
 ## 2026-08-08 - Phase 6 camera mount geometry acceptance
 
 ### Changes

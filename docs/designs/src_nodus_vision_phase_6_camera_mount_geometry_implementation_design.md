@@ -86,8 +86,12 @@ p_mount = T_mount_camera_optical * p_camera_optical
 ```
 
 - 위치 단위는 meter다.
+- `r1`, `r2`, `r3`의 각도 단위는 radian이다.
 - homogeneous column vector `[x, y, z, 1]^T`를 사용한다.
 - public 4x4 array는 row-major다.
+- `euler_type=A1A2A3`이면 local rotation은
+  `R_mount_camera_body = R_A1(r1) * R_A2(r2) * R_A3(r3)` 순서로 합성한다. 이 순서는
+  PA-CONTROL의 `nodus_rm::matrix::RotationMatrix(euler, EulerType)` 의미와 동일해야 한다.
 - PA-CONTROL의 optical remap `optical(x,y,z) -> body(x,z,-y)`를 canonical matrix에 정확히 한 번
   합성한다.
 - request마다 Euler를 계산하거나 별도 hidden axis remap을 추가하지 않는다.
@@ -189,7 +193,7 @@ example과 parser/schema/test를 같은 checkpoint에서 전환한다. 아직 �
 startup에서 다음을 검증하고 실패하면 provider/camera start 전에 fail closed한다.
 
 - frame/calibration string이 non-empty bounded UTF-8 text
-- translation과 Euler 값이 finite
+- translation은 meter, Euler 값은 radian이며 모두 finite
 - `euler_type`이 지원 목록 `XYZ`, `XZY`, `YXZ`, `YZX`, `ZXY`, `ZYX`, `ZXZ`, `ZYZ` 중 하나
 - translation 각 축이 configured maximum absolute bound 이하
 - normalized matrix의 마지막 row가 `[0,0,0,1]`
@@ -269,6 +273,15 @@ camera adapter
 
 Phase 6 additive field를 반영해 Vision Provider API minor version은 `1.3.0`으로 올린다. 새 route나
 `output_frame` request parameter는 추가하지 않는다.
+
+OpenAPI만 소비하는 구현도 좌표 의미를 재구성할 수 있도록 모든 geometry field에 다음 내용을 직접
+기록한다.
+
+- point 단위는 meter
+- matrix는 row-major homogeneous 4x4
+- column-vector 식 `p_mount = T_mount_camera_optical * p_camera_optical`
+- `point_mount_m`은 static camera-to-mount까지만 적용된 값이며 root/base/world point가 아님
+- dynamic `T_root_mount(t_capture)`는 timestamp-aware consumer가 별도로 적용
 
 ### 10.1 pixel query
 
@@ -374,6 +387,9 @@ schemas/vision/v1/fixtures/
 
 fixture는 static offset, optical axis remap, 두 개의 다른 dynamic mount pose를 포함한다. 두 pose에서 camera
 point가 mount와 함께 정확히 이동하고 static offset이 두 번 적용되지 않음을 검증할 수 있어야 한다.
+PCD1 `.bin`은 repository에 immutable golden bytes로 커밋하며 provider test는 binary와 expected JSON을 모두
+직접 읽어 codec output, decoded header, raw point, RGB와 matrix를 비교한다. C++ hardcoded 값만 비교해
+fixture가 독립적으로 drift하는 상태는 acceptance가 아니다.
 
 ## 13. timestamp와 recovery handoff
 
@@ -418,6 +434,7 @@ Vision에 mutable latest-pose 우회 경로를 추가하지 않는다.
 
 - PA-CONTROL example `z=0.06`, `XYZ` normalization
 - supported Euler conventions
+- radian 단위와 PA-CONTROL/nodus_rm 다축 Euler composition parity
 - non-finite/bounded translation rejection
 - optical `(x,y,z) -> body(x,z,-y)` fixture
 - translation/rotation composition order
@@ -438,6 +455,7 @@ Vision에 mutable latest-pose 우회 경로를 추가하지 않는다.
 - non-identity matrix3x4 round trip
 - decoder preserves matrix
 - raw point plus matrix equals JSON mount point fixture
+- committed `.bin` golden bytes와 expected JSON의 direct conformance
 - malformed/non-finite matrix rejection
 
 ### 15.4 integration

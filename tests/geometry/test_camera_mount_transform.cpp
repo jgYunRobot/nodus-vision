@@ -73,6 +73,24 @@ TEST(CameraMountTransform, AppliesEulerBeforeOpticalConventionAndTranslation) {
     EXPECT_NEAR(point_mount.at(2), 0.0F, 1.0e-6F);
 }
 
+TEST(CameraMountTransform, MatchesPaControlNodusRmXyzEulerGoldenMatrix) {
+    CalibrationConfig calibration = makeCalibration();
+    calibration.mount_local_transform = {0.0, 0.0, 0.0, 0.2, -0.4, 0.6, "XYZ"};
+    const CameraMountTransform transform = buildCameraMountTransform(calibration);
+
+    const std::array<double, 9> expected_rotation_with_optical_convention = {
+        0.760184441854691, 0.389418342308651, -0.520070157801479,
+        0.489534729385742, 0.182986571299987, 0.852567688485262,
+        0.427171350967384, -0.902701096375460, -0.051530258249325,
+    };
+    for (int row = 0; row < 3; ++row) {
+        for (int column = 0; column < 3; ++column) {
+            EXPECT_NEAR(transform.mount_from_camera_optical_matrix4x4.at(row * 4 + column),
+                        expected_rotation_with_optical_convention.at(row * 3 + column), 1.0e-12);
+        }
+    }
+}
+
 TEST(CameraMountTransform, SupportsEveryConfiguredEulerConvention) {
     constexpr const char* EULER_TYPES[] = {"XYZ", "XZY", "YXZ", "YZX", "ZXY", "ZYX", "ZXZ", "ZYZ"};
     for (const char* euler_type : EULER_TYPES) {
