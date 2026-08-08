@@ -1,5 +1,85 @@
 # Progress
 
+## 2026-08-09 - Intel D435 Depth preview implementation design
+
+### Changes
+
+- Added a focused implementation design for converting each D435 Z16 frame into a
+  librealsense-colorized RGB preview owned by the same immutable captured frame.
+- Kept the existing `/snapshot/depth`, `/stream/depth.mjpg`, Pilot descriptor, latest-only cache,
+  and Portal direct-consumer contracts unchanged.
+- Defined failure isolation so a colorizer failure suppresses only that frame's presentation
+  preview and does not discard the raw Depth frame, Color frame, or metric query source.
+- Split delivery into baseline, adapter implementation, hardware-independent regression, and
+  explicitly authorized physical D435 acceptance checkpoints.
+
+### Status
+
+- The missing Depth image is traced to
+  `IntelD435CapturedFrame::getDepthPreviewFrameView()` always returning `std::nullopt` while the
+  D435 endpoint catalog advertises Depth preview capability.
+- The implementation owner is `src/adapters/intel_d435`; no Portal, Pilot, public schema, config,
+  or API-version change is planned.
+- Design document: `docs/designs/src_adapters_intel_d435_depth_preview_implementation_design.md`.
+
+### Validation
+
+- Reviewed the current D435 adapter, camera-neutral frame boundary, encoder/cache/runtime path,
+  provider endpoints, Pilot catalog, existing tests, and the pinned PA-CONTROL colorizer source.
+- Documentation-only change; build, CTest, Portal tests, and physical Camera execution were not
+  run.
+
+### Next goals
+
+- Implement DP1 immutable colorized Depth frame ownership without changing public contracts.
+- Run DP2 hardware-independent regression only when implementation validation is explicitly
+  requested, then perform DP3 on the approved D435 hardware boundary.
+
+## 2026-08-08 - Physical D435 Color bring-up
+
+### Changes
+
+- Added `assets/configs/examples/intel_d435_pilot.json` by migrating the PA-CONTROL `top_d435`
+  640x480@30 Color/Depth profile, mount frame, and static local transform to Vision port 8902.
+- Restored PA-CONTROL-compatible serial behavior: an empty selector accepts exactly one
+  name-matching D435 and retains fail-closed ambiguity when multiple devices match.
+- Raised the D435 capture wait to 5000 ms and enforced a 1000 ms minimum for configured
+  Provider/Pilot/recording failure timeouts. Retry delays and encoder wake intervals remain
+  independent cadence values.
+- Updated the config schema, design contracts, example configs, and parser regression coverage.
+
+### Status
+
+- Hardware evidence: Intel RealSense D435 `8086:0b07`, librealsense serial `241222076339`, USB 3
+  path `pci-0000:00:0d.0-usb-0:2`, local Pilot `127.0.0.1:8765`, and trusted-LAN Provider
+  `192.168.219.106:8902`.
+- Initial Vision and PA-CONTROL capture attempts both failed with `Frame didn't arrive within 5000`.
+  Kernel evidence showed repeated UVC `-71` (`EPROTO`) completion errors with no process holding the
+  video nodes. A librealsense Camera hardware reset re-enumerated the D435 and restored capture.
+- Vision now reports `ready`, Camera `streaming`, Pilot `online`, and zero capture timeouts. Two
+  Color snapshots advanced from frame 622 to 653 and decoded as 640x480 JPEG images; a later LAN
+  CORS request reached frame 1146.
+- The Vision process remains running from
+  `./run_app.sh --config assets/configs/examples/intel_d435_pilot.json` for Portal inspection.
+- This is limited Color bring-up acceptance. D435 timestamps currently remain zero,
+  `latest_frame_age_ms` remains unavailable, and the adapter still lacks a Depth preview view,
+  complete ROI/PCD data, recording acceptance, reconnect recovery, and calibrated extrinsics.
+
+### Validation
+
+- Exact clang-format 18.1.8 dry-run, JSON parsing, and `git diff --check` passed.
+- Debug build and install completed successfully; CTest was not run.
+- The existing PA-CONTROL D435 executable, without a serial selector, captured five configured
+  Depth/Color frames after Camera reset.
+- Vision `/health`, `/snapshot/color`, frame identity advance, JPEG dimensions, Pilot online state,
+  and exact `http://192.168.219.106:5173` CORS response were verified on the physical Camera.
+
+### Next goals
+
+- Populate monotonic/Unix capture timestamps and fresh-frame age in the D435 adapter.
+- Implement and accept Depth preview conversion before claiming Portal Depth support.
+- Add bounded D435 ROI and populated PCD1 acceptance, then recording and disconnect/reconnect smoke.
+
 ## 2026-08-08 - Application run helper
 
 ### Changes
