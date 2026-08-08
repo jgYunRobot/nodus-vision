@@ -5,6 +5,7 @@
 
 #include "vision_config.hpp"
 
+#include <array>
 #include <boost/json.hpp>
 #include <cmath>
 #include <filesystem>
@@ -13,6 +14,11 @@
 
 namespace nodus_vision {
 namespace {
+
+constexpr double MAX_MOUNT_TRANSLATION_M = 10.0;
+constexpr std::array<const char*, 8> SUPPORTED_EULER_TYPES = {
+    "XYZ", "XZY", "YXZ", "YZX", "ZXY", "ZYX", "ZXZ", "ZYZ",
+};
 
 const boost::json::value& requireField(const boost::json::object& object, const char* key,
                                        const char* path) {
@@ -126,6 +132,27 @@ int getUrlPort(const std::string& url) {
     return std::stoi(authority.substr(authority.rfind(':') + 1U));
 }
 
+bool isEulerTypeSupported(const std::string& euler_type) {
+    for (const char* supported_type : SUPPORTED_EULER_TYPES) {
+        if (euler_type == supported_type) {
+            return true;
+        }
+    }
+    return false;
+}
+
+double requireFiniteNumber(const boost::json::object& object, const char* key, const char* path) {
+    const boost::json::value& value = requireField(object, key, path);
+    if (!value.is_double() && !value.is_int64() && !value.is_uint64()) {
+        throw std::invalid_argument(std::string(path) + ": must be a finite number.");
+    }
+    const double parsed = value.to_number<double>();
+    if (!std::isfinite(parsed)) {
+        throw std::invalid_argument(std::string(path) + ": must be a finite number.");
+    }
+    return parsed;
+}
+
 }  // namespace
 
 VisionConfig parseVisionConfig(const std::string& json_text) {
@@ -199,29 +226,42 @@ VisionConfig parseVisionConfig(const std::string& json_text) {
         throw std::invalid_argument("/device/adapter: unsupported adapter.");
     }
     const boost::json::object& calibration = requireObject(root, "calibration", "/calibration");
-    rejectUnknownFields(
-        calibration, {"calibration_id", "sensor_frame", "mount_frame", "camera_to_mount_matrix4x4"},
-        "/calibration");
+    rejectUnknownFields(calibration,
+                        {"calibration_id", "sensor_frame", "mount_frame", "mount_local_transform"},
+                        "/calibration");
     config.calibration.calibration_id =
         requireString(calibration, "calibration_id", "/calibration/calibration_id");
     config.calibration.sensor_frame =
         requireString(calibration, "sensor_frame", "/calibration/sensor_frame");
     config.calibration.mount_frame =
         requireString(calibration, "mount_frame", "/calibration/mount_frame");
-    const boost::json::array& matrix = requireField(calibration, "camera_to_mount_matrix4x4",
-                                                    "/calibration/camera_to_mount_matrix4x4")
-                                           .as_array();
-    if (matrix.size() != config.calibration.camera_to_mount_matrix4x4.size()) {
+    const boost::json::object& mount_local_transform =
+        requireObject(calibration, "mount_local_transform", "/calibration/mount_local_transform");
+    rejectUnknownFields(mount_local_transform, {"x", "y", "z", "r1", "r2", "r3", "euler_type"},
+                        "/calibration/mount_local_transform");
+    config.calibration.mount_local_transform.x =
+        requireFiniteNumber(mount_local_transform, "x", "/calibration/mount_local_transform/x");
+    config.calibration.mount_local_transform.y =
+        requireFiniteNumber(mount_local_transform, "y", "/calibration/mount_local_transform/y");
+    config.calibration.mount_local_transform.z =
+        requireFiniteNumber(mount_local_transform, "z", "/calibration/mount_local_transform/z");
+    config.calibration.mount_local_transform.r1 =
+        requireFiniteNumber(mount_local_transform, "r1", "/calibration/mount_local_transform/r1");
+    config.calibration.mount_local_transform.r2 =
+        requireFiniteNumber(mount_local_transform, "r2", "/calibration/mount_local_transform/r2");
+    config.calibration.mount_local_transform.r3 =
+        requireFiniteNumber(mount_local_transform, "r3", "/calibration/mount_local_transform/r3");
+    config.calibration.mount_local_transform.euler_type = requireString(
+        mount_local_transform, "euler_type", "/calibration/mount_local_transform/euler_type");
+    if (std::abs(config.calibration.mount_local_transform.x) > MAX_MOUNT_TRANSLATION_M ||
+        std::abs(config.calibration.mount_local_transform.y) > MAX_MOUNT_TRANSLATION_M ||
+        std::abs(config.calibration.mount_local_transform.z) > MAX_MOUNT_TRANSLATION_M) {
         throw std::invalid_argument(
-            "/calibration/camera_to_mount_matrix4x4: must contain 16 finite values.");
+            "/calibration/mount_local_transform: translation is outside the allowed range.");
     }
-    for (std::size_t index = 0; index < matrix.size(); ++index) {
-        const double element = matrix.at(index).to_number<double>();
-        if (!std::isfinite(element)) {
-            throw std::invalid_argument(
-                "/calibration/camera_to_mount_matrix4x4: values must be finite.");
-        }
-        config.calibration.camera_to_mount_matrix4x4.at(index) = element;
+    if (!isEulerTypeSupported(config.calibration.mount_local_transform.euler_type)) {
+        throw std::invalid_argument(
+            "/calibration/mount_local_transform/euler_type: unsupported Euler convention.");
     }
     const boost::json::object& provider = requireObject(root, "provider", "/provider");
     rejectUnknownFields(

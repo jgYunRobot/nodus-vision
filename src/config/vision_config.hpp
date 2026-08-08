@@ -6,7 +6,6 @@
 #ifndef NODUS_VISION_CONFIG_VISION_CONFIG_HPP_
 #define NODUS_VISION_CONFIG_VISION_CONFIG_HPP_
 
-#include <array>
 #include <cstdint>
 #include <string>
 
@@ -54,12 +53,23 @@ struct RecordingConfig {
     std::string tune;
 };
 
+/** @brief camera body의 mount frame 기준 고정 pose다. */
+struct MountLocalTransform {
+    double x{0.0};
+    double y{0.0};
+    double z{0.0};
+    double r1{0.0};
+    double r2{0.0};
+    double r3{0.0};
+    std::string euler_type;
+};
+
 /** @brief immutable calibration configuration이다. */
 struct CalibrationConfig {
     std::string calibration_id;
     std::string sensor_frame;
     std::string mount_frame;
-    std::array<double, 16> camera_to_mount_matrix4x4{};
+    MountLocalTransform mount_local_transform;
 };
 
 /** @brief strict parsed Vision configuration이다. */

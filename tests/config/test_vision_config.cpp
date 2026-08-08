@@ -12,7 +12,7 @@ constexpr const char* VALID_CONFIG = R"json({
   "device_id": "fake_top",
   "component_id": "camera.fake_top",
   "device": {"adapter": "fake", "fake": {"width": 4, "height": 3, "fps": 30, "start_frame_number": 1, "pattern_seed": 7}},
-  "calibration": {"calibration_id": "fake_v1", "sensor_frame": "fake_optical", "mount_frame": "fake_mount", "camera_to_mount_matrix4x4": [1.0,0.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,0.0,1.0]},
+  "calibration": {"calibration_id": "fake_v1", "sensor_frame": "fake_optical", "mount_frame": "fake_mount", "mount_local_transform": {"x": 0.0, "y": 0.0, "z": 0.06, "r1": 0.0, "r2": 0.0, "r3": 0.0, "euler_type": "XYZ"}},
   "provider": {"bind_host": "127.0.0.1", "port": 0, "advertised_base_url": "http://127.0.0.1:8900", "max_connections": 4, "max_stream_clients": 2, "request_timeout_ms": 1000, "max_header_bytes": 8192, "max_body_bytes": 4096, "max_frame_age_ms": 1000},
   "pilot": {"enabled": false, "base_url": "http://127.0.0.1:8765", "clock_domain": "monotonic_same_host", "connect_timeout_ms": 500, "request_timeout_ms": 1000, "max_response_bytes": 65536, "retry_initial_delay_ms": 100, "retry_max_delay_ms": 5000, "shutdown_timeout_ms": 1500},
   "recording": {"enabled": false, "root": "/tmp/nodus-vision-test-recordings", "queue_capacity_frames": 120, "max_duration_ms": 600000, "minimum_free_bytes": 1073741824, "finalize_timeout_ms": 10000, "bit_rate_bps": 8000000, "preset": "veryfast", "tune": "zerolatency"}
@@ -27,7 +27,8 @@ TEST(VisionConfig, ParsesStrictFakeProviderConfig) {
     EXPECT_EQ(config.adapter, "fake");
     EXPECT_EQ(config.fake.width, 4);
     EXPECT_EQ(config.provider.port, 8900);
-    EXPECT_EQ(config.calibration.camera_to_mount_matrix4x4.at(0), 1.0);
+    EXPECT_EQ(config.calibration.mount_local_transform.z, 0.06);
+    EXPECT_EQ(config.calibration.mount_local_transform.euler_type, "XYZ");
     EXPECT_FALSE(config.recording.enabled);
 }
 
@@ -93,6 +94,21 @@ TEST(VisionConfig, RequiresSafeExplicitRecordingConfiguration) {
     relative_root.replace(relative_root.find("/tmp/nodus-vision-test-recordings"), 33U,
                           "relative-recordings");
     EXPECT_THROW(parseVisionConfig(relative_root), std::invalid_argument);
+}
+
+TEST(VisionConfig, RejectsInvalidMountLocalTransform) {
+    std::string unsupported_euler = VALID_CONFIG;
+    unsupported_euler.replace(unsupported_euler.find("\"XYZ\""), 5U, "\"ABC\"");
+    EXPECT_THROW(parseVisionConfig(unsupported_euler), std::invalid_argument);
+
+    std::string excessive_translation = VALID_CONFIG;
+    excessive_translation.replace(excessive_translation.find("\"z\": 0.06"), 9U, "\"z\": 10.1");
+    EXPECT_THROW(parseVisionConfig(excessive_translation), std::invalid_argument);
+
+    std::string legacy_link_id = VALID_CONFIG;
+    legacy_link_id.replace(legacy_link_id.find("\"mount_local_transform\""), 23U,
+                           "\"mount_link_id\": 4, \"mount_local_transform\"");
+    EXPECT_THROW(parseVisionConfig(legacy_link_id), std::invalid_argument);
 }
 
 }  // namespace nodus_vision

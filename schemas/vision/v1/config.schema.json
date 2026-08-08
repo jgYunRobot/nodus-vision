@@ -51,18 +51,13 @@
         "calibration_id",
         "sensor_frame",
         "mount_frame",
-        "camera_to_mount_matrix4x4"
+        "mount_local_transform"
       ],
       "properties": {
         "calibration_id": {"$ref": "#/$defs/bounded_string"},
         "sensor_frame": {"$ref": "#/$defs/bounded_string"},
         "mount_frame": {"$ref": "#/$defs/bounded_string"},
-        "camera_to_mount_matrix4x4": {
-          "type": "array",
-          "minItems": 16,
-          "maxItems": 16,
-          "items": {"type": "number"}
-        }
+        "mount_local_transform": {"$ref": "#/$defs/mount_local_transform"}
       }
     },
     "provider": {
@@ -150,6 +145,20 @@
       "minLength": 1,
       "maxLength": 128,
       "pattern": "^[^\\u0000-\\u001F\\u007F]+$"
+    },
+    "mount_local_transform": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y", "z", "r1", "r2", "r3", "euler_type"],
+      "properties": {
+        "x": {"type": "number", "minimum": -10, "maximum": 10},
+        "y": {"type": "number", "minimum": -10, "maximum": 10},
+        "z": {"type": "number", "minimum": -10, "maximum": 10},
+        "r1": {"type": "number"},
+        "r2": {"type": "number"},
+        "r3": {"type": "number"},
+        "euler_type": {"enum": ["XYZ", "XZY", "YXZ", "YZX", "ZXY", "ZYX", "ZXZ", "ZYZ"]}
+      }
     },
     "fake_device": {
       "type": "object",

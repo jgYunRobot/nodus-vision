@@ -3,7 +3,7 @@
   "device_id": "fake_top",
   "component_id": "camera.fake_top",
   "device": {"adapter": "fake", "fake": {"width": 640, "height": 480, "fps": 30, "start_frame_number": 1, "pattern_seed": 7}},
-  "calibration": {"calibration_id": "fake_v1", "sensor_frame": "fake_optical", "mount_frame": "fake_mount", "camera_to_mount_matrix4x4": [1.0,0.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,0.0,1.0]},
+  "calibration": {"calibration_id": "fake_v1", "sensor_frame": "fake_optical", "mount_frame": "fake_mount", "mount_local_transform": {"x": 0.0, "y": 0.0, "z": 0.0, "r1": 0.0, "r2": 0.0, "r3": 0.0, "euler_type": "XYZ"}},
   "provider": {"bind_host": "127.0.0.1", "port": 8900, "advertised_base_url": "http://127.0.0.1:8900", "max_connections": 32, "max_stream_clients": 4, "request_timeout_ms": 1000, "max_header_bytes": 8192, "max_body_bytes": 4096, "max_frame_age_ms": 1000},
   "pilot": {"enabled": false, "base_url": "http://127.0.0.1:8765", "clock_domain": "monotonic_same_host", "connect_timeout_ms": 500, "request_timeout_ms": 1000, "max_response_bytes": 65536, "retry_initial_delay_ms": 100, "retry_max_delay_ms": 5000, "shutdown_timeout_ms": 1500},
   "recording": {"enabled": false, "root": "/var/lib/nodus-vision/recordings", "queue_capacity_frames": 120, "max_duration_ms": 600000, "minimum_free_bytes": 1073741824, "finalize_timeout_ms": 10000, "bit_rate_bps": 8000000, "preset": "veryfast", "tune": "zerolatency"}
