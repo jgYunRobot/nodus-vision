@@ -62,7 +62,7 @@ creates `color.mp4`, `frames.jsonl`, and checksum-backed `recording_manifest.jso
 configured absolute artifact root; Vision does not perform episode or dataset commits. Their public contract is
 `schemas/vision/v1/openapi.yaml`; the binary point-cloud layout is documented in
 `schemas/vision/v1/pointcloud_pcd1_v2.md`.
-The additive recording contract is published as Vision Provider API `1.2.0`.
+The additive camera-mount geometry contract is published as Vision Provider API `1.3.0`.
 
 The fake-camera default disables Pilot. Use `assets/configs/examples/fake_camera_pilot.json` to
 enable the public HTTP lifecycle client against a local fake or deployed Pilot endpoint. The

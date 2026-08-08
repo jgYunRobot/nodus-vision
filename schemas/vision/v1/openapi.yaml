@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Nodus Vision Provider API
-  version: 1.2.0
+  version: 1.3.0
   description: >-
     Trusted same-host or LAN camera payload API. Component discovery is handled separately by
     Nodus Pilot; image, depth, query, point-cloud, and recording lifecycle payloads are served
@@ -106,6 +106,8 @@ paths:
               $ref: '#/components/headers/CaptureUnixEpoch'
             X-Nodus-Sensor-Frame:
               $ref: '#/components/headers/SensorFrame'
+            X-Nodus-Mount-Frame:
+              $ref: '#/components/headers/MountFrame'
             X-Nodus-Calibration-Id:
               $ref: '#/components/headers/CalibrationId'
           content:
@@ -132,6 +134,8 @@ paths:
               $ref: '#/components/headers/CaptureUnixEpoch'
             X-Nodus-Sensor-Frame:
               $ref: '#/components/headers/SensorFrame'
+            X-Nodus-Mount-Frame:
+              $ref: '#/components/headers/MountFrame'
             X-Nodus-Calibration-Id:
               $ref: '#/components/headers/CalibrationId'
           content:
@@ -164,6 +168,8 @@ paths:
               $ref: '#/components/headers/CaptureUnixEpoch'
             X-Nodus-Sensor-Frame:
               $ref: '#/components/headers/SensorFrame'
+            X-Nodus-Mount-Frame:
+              $ref: '#/components/headers/MountFrame'
             X-Nodus-Calibration-Id:
               $ref: '#/components/headers/CalibrationId'
           content:
@@ -199,6 +205,8 @@ paths:
               $ref: '#/components/headers/CaptureUnixEpoch'
             X-Nodus-Sensor-Frame:
               $ref: '#/components/headers/SensorFrame'
+            X-Nodus-Mount-Frame:
+              $ref: '#/components/headers/MountFrame'
             X-Nodus-Calibration-Id:
               $ref: '#/components/headers/CalibrationId'
           content:
@@ -228,6 +236,8 @@ paths:
               $ref: '#/components/headers/CaptureUnixEpoch'
             X-Nodus-Sensor-Frame:
               $ref: '#/components/headers/SensorFrame'
+            X-Nodus-Mount-Frame:
+              $ref: '#/components/headers/MountFrame'
             X-Nodus-Calibration-Id:
               $ref: '#/components/headers/CalibrationId'
           content:
@@ -329,6 +339,10 @@ components:
         format: int64
     SensorFrame:
       description: Camera optical frame identifier.
+      schema:
+        type: string
+    MountFrame:
+      description: Named dynamic robot frame that owns the camera mount pose.
       schema:
         type: string
     CalibrationId:
@@ -512,7 +526,7 @@ components:
         schema_version:
           const: 1
         api_version:
-          const: '1.2.0'
+          const: '1.3.0'
         device_id:
           type: string
         adapter:
@@ -523,11 +537,16 @@ components:
         calibration:
           type: object
           additionalProperties: false
-          required: [calibration_id, sensor_frame, mount_frame]
+          required: [calibration_id, sensor_frame, mount_frame, mount_from_camera_optical_matrix4x4]
           properties:
             calibration_id: {type: string}
             sensor_frame: {type: string}
             mount_frame: {type: string}
+            mount_from_camera_optical_matrix4x4:
+              type: array
+              minItems: 16
+              maxItems: 16
+              items: {type: number}
         endpoints:
           type: array
           uniqueItems: true
@@ -678,7 +697,9 @@ components:
         - roi
         - stats
         - median_pixel
+        - geometry
         - median_point_camera_m
+        - median_point_mount_m
       properties:
         schema_version:
           const: 1
@@ -718,6 +739,10 @@ components:
             y: {type: integer, minimum: 0}
         median_point_camera_m:
           $ref: '#/components/schemas/Point3'
+        geometry:
+          $ref: '#/components/schemas/CameraMountGeometry'
+        median_point_mount_m:
+          $ref: '#/components/schemas/Point3'
     PixelPointRequest:
       type: object
       additionalProperties: false
@@ -728,12 +753,14 @@ components:
     PixelPointResponse:
       type: object
       additionalProperties: false
-      required: [schema_version, frame, pixel, valid]
+      required: [schema_version, frame, geometry, pixel, valid]
       properties:
         schema_version:
           const: 1
         frame:
           $ref: '#/components/schemas/FrameIdentity'
+        geometry:
+          $ref: '#/components/schemas/CameraMountGeometry'
         pixel:
           type: object
           additionalProperties: false
@@ -748,6 +775,8 @@ components:
           minimum: 0
         point_camera_m:
           $ref: '#/components/schemas/Point3'
+        point_mount_m:
+          $ref: '#/components/schemas/Point3'
         reason:
           type: string
     Point3:
@@ -758,3 +787,16 @@ components:
         x: {type: number}
         y: {type: number}
         z: {type: number}
+    CameraMountGeometry:
+      type: object
+      additionalProperties: false
+      required: [calibration_id, sensor_frame, mount_frame, mount_from_camera_optical_matrix4x4]
+      properties:
+        calibration_id: {type: string}
+        sensor_frame: {type: string}
+        mount_frame: {type: string}
+        mount_from_camera_optical_matrix4x4:
+          type: array
+          minItems: 16
+          maxItems: 16
+          items: {type: number}

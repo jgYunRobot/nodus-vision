@@ -38,9 +38,23 @@ boost::json::object makePoint(const std::array<float, 3>& point) {
     return value;
 }
 
+boost::json::object makeGeometry(const CameraMountTransform& transform) {
+    boost::json::array matrix;
+    for (const double value : transform.mount_from_camera_optical_matrix4x4) {
+        matrix.emplace_back(value);
+    }
+    boost::json::object geometry;
+    geometry["calibration_id"] = transform.calibration_id;
+    geometry["sensor_frame"] = transform.sensor_frame;
+    geometry["mount_frame"] = transform.mount_frame;
+    geometry["mount_from_camera_optical_matrix4x4"] = std::move(matrix);
+    return geometry;
+}
+
 }  // namespace
 
-std::string serializePixelPointResult(const PixelPointResult& result) {
+std::string serializePixelPointResult(const PixelPointResult& result,
+                                      const CameraMountTransform& transform) {
     boost::json::object pixel;
     pixel["x"] = result.pixel_x;
     pixel["y"] = result.pixel_y;
@@ -48,18 +62,22 @@ std::string serializePixelPointResult(const PixelPointResult& result) {
     boost::json::object root;
     root["schema_version"] = 1;
     root["frame"] = makeFrameIdentity(result.identity);
+    root["geometry"] = makeGeometry(transform);
     root["pixel"] = std::move(pixel);
     root["valid"] = result.valid;
     if (result.valid) {
         root["depth_m"] = result.depth_m;
         root["point_camera_m"] = makePoint(result.optical_point_m);
+        root["point_mount_m"] =
+            makePoint(transformCameraPointToMount(result.optical_point_m, transform));
     } else {
         root["reason"] = result.invalid_reason;
     }
     return boost::json::serialize(root);
 }
 
-std::string serializeRoiDepthResult(const RoiDepthResult& result) {
+std::string serializeRoiDepthResult(const RoiDepthResult& result,
+                                    const CameraMountTransform& transform) {
     boost::json::object stats;
     stats["valid"] = result.valid;
     stats["pixel_count"] = result.pixel_count;
@@ -77,11 +95,14 @@ std::string serializeRoiDepthResult(const RoiDepthResult& result) {
     boost::json::object root;
     root["schema_version"] = 1;
     root["frame"] = makeFrameIdentity(result.identity);
+    root["geometry"] = makeGeometry(transform);
     root["requested_roi"] = makePixelRoi(result.requested_roi);
     root["roi"] = makePixelRoi(result.clamped_roi);
     root["stats"] = std::move(stats);
     root["median_pixel"] = std::move(median_pixel);
     root["median_point_camera_m"] = makePoint(result.median_optical_point_m);
+    root["median_point_mount_m"] =
+        makePoint(transformCameraPointToMount(result.median_optical_point_m, transform));
     return boost::json::serialize(root);
 }
 

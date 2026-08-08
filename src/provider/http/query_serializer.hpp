@@ -9,12 +9,16 @@
 #include <nodus_vision/camera_contracts.hpp>
 #include <string>
 
+#include "camera_mount_transform.hpp"
+
 namespace nodus_vision {
 
 /** @brief pixel query 결과를 versioned JSON으로 직렬화한다. */
-std::string serializePixelPointResult(const PixelPointResult& result);
+std::string serializePixelPointResult(const PixelPointResult& result,
+                                      const CameraMountTransform& transform);
 /** @brief ROI depth query 결과를 versioned JSON으로 직렬화한다. */
-std::string serializeRoiDepthResult(const RoiDepthResult& result);
+std::string serializeRoiDepthResult(const RoiDepthResult& result,
+                                    const CameraMountTransform& transform);
 
 }  // namespace nodus_vision
 

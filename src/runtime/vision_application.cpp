@@ -22,6 +22,7 @@
 #include <utility>
 #include <vector>
 
+#include "camera_mount_transform.hpp"
 #include "encoded_preview_cache.hpp"
 #include "fake_camera_adapter.hpp"
 #include "intel_d435_adapter.hpp"
@@ -156,14 +157,15 @@ ProviderHttpResponse makeErrorResponse(int status, const std::string& code,
 }
 
 std::vector<std::pair<std::string, std::string>> makeIdentityHeaders(
-    const FrameIdentity& identity, const CalibrationConfig& calibration) {
+    const FrameIdentity& identity, const CameraMountTransform& transform) {
     return {
         {"X-Nodus-Capture-Generation", std::to_string(identity.capture_generation)},
         {"X-Nodus-Frame-Number", std::to_string(identity.frame_number)},
         {"X-Nodus-Capture-Timestamp-Ns", std::to_string(identity.capture_timestamp_ns)},
         {"X-Nodus-Capture-Unix-Epoch-Ns", std::to_string(identity.capture_unix_epoch_ns)},
-        {"X-Nodus-Sensor-Frame", calibration.sensor_frame},
-        {"X-Nodus-Calibration-Id", calibration.calibration_id},
+        {"X-Nodus-Sensor-Frame", transform.sensor_frame},
+        {"X-Nodus-Mount-Frame", transform.mount_frame},
+        {"X-Nodus-Calibration-Id", transform.calibration_id},
     };
 }
 
@@ -283,7 +285,7 @@ std::string makeHealthJson(const ProviderHealthSnapshot& health, bool recording_
     return boost::json::serialize(root);
 }
 
-std::string makeMetadataJson(const VisionConfig& config) {
+std::string makeMetadataJson(const VisionConfig& config, const CameraMountTransform& transform) {
     boost::json::array endpoints;
     endpoints.emplace_back("/health");
     endpoints.emplace_back("/metadata");
@@ -303,13 +305,18 @@ std::string makeMetadataJson(const VisionConfig& config) {
     }
 
     boost::json::object calibration;
-    calibration["calibration_id"] = config.calibration.calibration_id;
-    calibration["sensor_frame"] = config.calibration.sensor_frame;
-    calibration["mount_frame"] = config.calibration.mount_frame;
+    calibration["calibration_id"] = transform.calibration_id;
+    calibration["sensor_frame"] = transform.sensor_frame;
+    calibration["mount_frame"] = transform.mount_frame;
+    boost::json::array matrix;
+    for (const double value : transform.mount_from_camera_optical_matrix4x4) {
+        matrix.emplace_back(value);
+    }
+    calibration["mount_from_camera_optical_matrix4x4"] = std::move(matrix);
 
     boost::json::object root;
     root["schema_version"] = 1;
-    root["api_version"] = "1.2.0";
+    root["api_version"] = "1.3.0";
     root["device_id"] = config.device_id;
     root["adapter"] = config.adapter;
     root["advertised_base_url"] = config.provider.advertised_base_url;
@@ -319,14 +326,14 @@ std::string makeMetadataJson(const VisionConfig& config) {
 }
 
 std::shared_ptr<const ProviderStreamFrame> makeStreamFrame(
-    const std::shared_ptr<const EncodedPreview>& preview, const CalibrationConfig& calibration) {
+    const std::shared_ptr<const EncodedPreview>& preview, const CameraMountTransform& transform) {
     if (preview == nullptr || preview->jpeg.empty()) {
         return nullptr;
     }
     auto p_frame = std::make_shared<ProviderStreamFrame>();
     p_frame->identity = preview->identity;
     p_frame->jpeg_data = std::shared_ptr<const std::vector<std::uint8_t>>(preview, &preview->jpeg);
-    p_frame->headers = makeIdentityHeaders(preview->identity, calibration);
+    p_frame->headers = makeIdentityHeaders(preview->identity, transform);
     return p_frame;
 }
 
@@ -337,6 +344,7 @@ class VisionApplication::Impl {
     explicit Impl(VisionConfig config) : m_config(std::move(config)) {}
 
     VisionConfig m_config;
+    CameraMountTransform m_camera_mount_transform;
     std::unique_ptr<CameraAdapter> m_p_adapter;
     std::unique_ptr<ProviderHttpServer> m_p_server;
     std::unique_ptr<PilotIntegrationClient> m_p_pilot_client;
@@ -369,6 +377,7 @@ void VisionApplication::startApplication() {
     m_p_impl->m_health.state = ProviderState::e_STARTING;
     m_p_impl->m_health.max_connections = m_p_impl->m_config.provider.max_connections;
     m_p_impl->m_health.max_stream_clients = m_p_impl->m_config.provider.max_stream_clients;
+    m_p_impl->m_camera_mount_transform = buildCameraMountTransform(m_p_impl->m_config.calibration);
 
     if (m_p_impl->m_config.adapter == "fake") {
         m_p_impl->m_p_adapter = std::make_unique<FakeCameraAdapter>(m_p_impl->m_config.fake);
@@ -410,7 +419,10 @@ void VisionApplication::startApplication() {
     };
     routes.get_metadata = [this]() {
         return ProviderHttpResponse{
-            200, "application/json", makeMetadataJson(m_p_impl->m_config), {}};
+            200,
+            "application/json",
+            makeMetadataJson(m_p_impl->m_config, m_p_impl->m_camera_mount_transform),
+            {}};
     };
     routes.post_recording_start = [this](const std::string& body) {
         if (m_p_impl->m_p_recording_manager == nullptr) {
@@ -473,12 +485,12 @@ void VisionApplication::startApplication() {
             }
             return ProviderHttpResponse{
                 200, "image/jpeg", std::string(preview->jpeg.begin(), preview->jpeg.end()),
-                makeIdentityHeaders(preview->identity, m_p_impl->m_config.calibration)};
+                makeIdentityHeaders(preview->identity, m_p_impl->m_camera_mount_transform)};
         };
         routes.get_color_stream_frame = [this, max_frame_age]() {
             return makeStreamFrame(
                 m_p_impl->m_preview_cache.acquireFreshPreview(PreviewKind::e_COLOR, max_frame_age),
-                m_p_impl->m_config.calibration);
+                m_p_impl->m_camera_mount_transform);
         };
     }
     routes.get_depth_snapshot = [this, max_frame_age]() {
@@ -490,12 +502,12 @@ void VisionApplication::startApplication() {
         }
         return ProviderHttpResponse{
             200, "image/jpeg", std::string(preview->jpeg.begin(), preview->jpeg.end()),
-            makeIdentityHeaders(preview->identity, m_p_impl->m_config.calibration)};
+            makeIdentityHeaders(preview->identity, m_p_impl->m_camera_mount_transform)};
     };
     routes.get_depth_stream_frame = [this, max_frame_age]() {
         return makeStreamFrame(
             m_p_impl->m_preview_cache.acquireFreshPreview(PreviewKind::e_DEPTH, max_frame_age),
-            m_p_impl->m_config.calibration);
+            m_p_impl->m_camera_mount_transform);
     };
     routes.get_pointcloud_snapshot = [this, max_frame_age]() {
         const std::shared_ptr<const CapturedFrame> frame =
@@ -509,7 +521,7 @@ void VisionApplication::startApplication() {
         const std::vector<std::uint8_t> bytes = writePcd1V2(cloud);
         return ProviderHttpResponse{
             200, "application/octet-stream", std::string(bytes.begin(), bytes.end()),
-            makeIdentityHeaders(cloud.identity, m_p_impl->m_config.calibration)};
+            makeIdentityHeaders(cloud.identity, m_p_impl->m_camera_mount_transform)};
     };
     routes.post_roi_depth = [this, max_frame_age](const std::string& body) {
         RoiRequest request;
@@ -532,8 +544,9 @@ void VisionApplication::startApplication() {
             const RoiDepthResult result =
                 frame->queryDepthInRoi(request.x, request.y, request.width, request.height);
             return ProviderHttpResponse{
-                200, "application/json", serializeRoiDepthResult(result),
-                makeIdentityHeaders(result.identity, m_p_impl->m_config.calibration)};
+                200, "application/json",
+                serializeRoiDepthResult(result, m_p_impl->m_camera_mount_transform),
+                makeIdentityHeaders(result.identity, m_p_impl->m_camera_mount_transform)};
         } catch (const std::exception&) {
             return makeErrorResponse(409, "query_failed", "ROI query failed.", true);
         }
@@ -566,8 +579,9 @@ void VisionApplication::startApplication() {
                 result = std::move(invalid);
             }
             return ProviderHttpResponse{
-                200, "application/json", serializePixelPointResult(*result),
-                makeIdentityHeaders(result->identity, m_p_impl->m_config.calibration)};
+                200, "application/json",
+                serializePixelPointResult(*result, m_p_impl->m_camera_mount_transform),
+                makeIdentityHeaders(result->identity, m_p_impl->m_camera_mount_transform)};
         } catch (const std::exception&) {
             return makeErrorResponse(409, "query_failed", "Pixel query failed.", true);
         }

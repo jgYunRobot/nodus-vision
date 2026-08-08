@@ -31,6 +31,7 @@ target_link_libraries(
     nodus_vision_provider_http
     PUBLIC
         nodus_vision_core
+        nodus_vision_geometry
         Boost::json
         Boost::system
         nodus_vision_libjpeg_turbo

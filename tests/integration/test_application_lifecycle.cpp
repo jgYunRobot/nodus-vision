@@ -39,6 +39,7 @@ VisionConfig makeFakeConfig() {
     config.calibration.calibration_id = "fake_calibration";
     config.calibration.sensor_frame = "fake_optical";
     config.calibration.mount_frame = "fake_mount";
+    config.calibration.mount_local_transform = {0.0, 0.0, 0.06, 0.0, 0.0, 0.0, "XYZ"};
     config.provider = {"127.0.0.1", 0, "http://127.0.0.1:8900", 4, 1, 1000, 8192, 4096, 1000};
     return config;
 }
@@ -211,13 +212,16 @@ TEST(VisionApplication, ServesFakeDataPlaneAndRestartsCleanly) {
     EXPECT_EQ(snapshot[http::field::content_type], "image/jpeg");
     EXPECT_FALSE(snapshot["X-Nodus-Frame-Number"].empty());
     EXPECT_EQ(snapshot["X-Nodus-Sensor-Frame"], "fake_optical");
+    EXPECT_EQ(snapshot["X-Nodus-Mount-Frame"], "fake_mount");
     EXPECT_EQ(snapshot["X-Nodus-Calibration-Id"], "fake_calibration");
 
     const http::response<http::string_body> metadata =
         requestResponse(first_port, http::verb::get, "/metadata");
     EXPECT_NE(metadata.body().find("/stream/color.mjpg"), std::string::npos);
     EXPECT_NE(metadata.body().find("/query/roi_depth"), std::string::npos);
-    EXPECT_EQ(boost::json::parse(metadata.body()).as_object().at("api_version"), "1.2.0");
+    const boost::json::object metadata_json = boost::json::parse(metadata.body()).as_object();
+    EXPECT_EQ(metadata_json.at("api_version"), "1.3.0");
+    EXPECT_EQ(metadata_json.at("calibration").as_object().at("mount_frame"), "fake_mount");
     const http::response<http::string_body> health =
         requestResponse(first_port, http::verb::get, "/health");
     const boost::json::object health_json = boost::json::parse(health.body()).as_object();
@@ -244,6 +248,11 @@ TEST(VisionApplication, ServesFakeDataPlaneAndRestartsCleanly) {
         requestResponse(first_port, http::verb::post, "/query/pixel_to_point", "{\"x\":1,\"y\":1}");
     EXPECT_EQ(query.result(), http::status::ok);
     EXPECT_FALSE(query["X-Nodus-Frame-Number"].empty());
+    EXPECT_EQ(query["X-Nodus-Mount-Frame"], "fake_mount");
+    const boost::json::object query_json = boost::json::parse(query.body()).as_object();
+    EXPECT_EQ(query_json.at("geometry").as_object().at("mount_frame"), "fake_mount");
+    EXPECT_TRUE(query_json.if_contains("point_camera_m") != nullptr);
+    EXPECT_TRUE(query_json.if_contains("point_mount_m") != nullptr);
     const http::response<http::string_body> invalid_query = requestResponse(
         first_port, http::verb::post, "/query/pixel_to_point", "{\"x\":99,\"y\":1}");
     EXPECT_EQ(invalid_query.result(), http::status::bad_request);
@@ -339,7 +348,7 @@ TEST(VisionApplication, RecordsThroughDirectHttpLifecycle) {
                     .as_bool());
     const boost::json::object recording_metadata =
         boost::json::parse(requestResponse(port, http::verb::get, "/metadata").body()).as_object();
-    EXPECT_EQ(recording_metadata.at("api_version"), "1.2.0");
+    EXPECT_EQ(recording_metadata.at("api_version"), "1.3.0");
     const boost::json::array& recording_endpoints = recording_metadata.at("endpoints").as_array();
     EXPECT_TRUE(std::any_of(recording_endpoints.begin(), recording_endpoints.end(),
                             [](const boost::json::value& endpoint) {
