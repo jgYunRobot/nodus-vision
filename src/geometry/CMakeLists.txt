@@ -1,0 +1,5 @@
+add_library(nodus_vision_geometry STATIC camera_mount_transform.cpp)
+target_include_directories(nodus_vision_geometry PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(nodus_vision_geometry PUBLIC nodus_vision_config)
+target_compile_features(nodus_vision_geometry PUBLIC cxx_std_17)
+target_compile_options(nodus_vision_geometry PRIVATE -Wall -Wextra)
