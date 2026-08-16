@@ -4,10 +4,11 @@
 physical camera adapters, frame capture, preview encoding, bounded spatial queries, point-cloud
 payloads, and immutable camera recording artifacts.
 
-Phase 0-5 are implemented. The current C++17 provider supports deterministic fake-camera operation,
+Phase 0-6 are implemented. The current C++17 provider supports deterministic fake-camera operation,
 hardware-independent Intel D435 adapter build validation, strict configuration, health/metadata,
 JPEG snapshots, latest-only MJPEG preview, depth queries, PCD1 v2 binary point clouds, bounded
-Pilot public lifecycle/catalog recovery, and direct RGB H.264 recording artifacts.
+Pilot public lifecycle/catalog recovery, direct RGB H.264 recording artifacts, and static
+mount-to-optical geometry publication.
 
 ## Target boundary
 
@@ -41,6 +42,25 @@ Initialize the shared submodule:
 ./setup_dev.sh
 ```
 
+Build and locally install from the already prepared dependency checkouts:
+
+```bash
+./make_full.sh
+```
+
+`make_full.sh` never invokes setup or initializes, updates, or checks out submodules. Run
+`setup_dev.sh` explicitly whenever dependency setup is intended.
+
+Common full-build options:
+
+```bash
+./make_full.sh --clean
+./make_full.sh --build-type Debug --clean
+./make_full.sh --build-type Debug --build-only
+./make_full.sh --configure-only
+./make_full.sh -j 32
+```
+
 Build and run the hardware-independent test suite:
 
 ```bash
@@ -65,6 +85,28 @@ The helper runs the existing matching Debug binary without rebuilding. Use `--bu
 or configuration-contract changes, and use `--config assets/configs/examples/fake_camera.json` for
 the Pilot-disabled profile.
 
+## Run profiles and options
+
+| Purpose | Command | Provider address |
+| --- | --- | --- |
+| Fake Camera with Pilot and LAN publication | `./run_app.sh` | configured `0.0.0.0:8900`, advertised `192.168.219.106:8900` |
+| Fake Camera without Pilot, loopback only | `./run_app.sh --config assets/configs/examples/fake_camera.json` | `127.0.0.1:8900` |
+| Rebuild Debug then run default profile | `./run_app.sh --build` | profile-defined |
+| Rebuild Release then run | `./run_app.sh --build --build-type Release -j 32` | profile-defined |
+| Physical Intel D435 with Pilot | `./run_app.sh --config assets/configs/examples/intel_d435_pilot.json` | configured `0.0.0.0:8902`, advertised `192.168.219.106:8902` |
+| Show launcher help | `./run_app.sh --help` | none |
+
+`run_app.sh` does not run setup. `--build` invokes `make_full.sh` against the dependency revisions
+already present in the checkout. Relative config paths are resolved from the repository root.
+
+Useful provider checks after starting a fake profile:
+
+```bash
+curl http://127.0.0.1:8900/health
+curl http://127.0.0.1:8900/metadata
+curl -o /tmp/nodus-vision-color.jpg http://127.0.0.1:8900/snapshot/color
+```
+
 Direct provider endpoints include `/health`, `/metadata`, color/depth MJPEG streams, color/depth
 JPEG snapshots, ROI/pixel depth queries, `/snapshot/pointcloud.bin`, and the direct recording
 `POST /recordings/start`, `POST /recordings/stop`, and `GET /recordings/current` lifecycle. Recording
@@ -79,8 +121,8 @@ enable the public HTTP lifecycle client against a local Pilot and expose the dir
 trusted LAN. That example binds on `0.0.0.0`, advertises `192.168.219.106:8900`, and allows the
 matching Portal development origins. Update the concrete advertised host and exact
 `allowed_origins` whenever the host LAN address or Portal port changes; never advertise `0.0.0.0`.
-The integration has no TLS/authentication or physical-camera acceptance claim. Phase 6 geometry
-and product integrations remain separate work.
+The integration has no TLS/authentication or production network-hardening claim. Product-level
+recording coordination remains outside Vision.
 
 The hardware-specific `assets/configs/examples/intel_d435_pilot.json` selects exactly one
 name-matching D435 without requiring a serial and migrates the PA-CONTROL `top_d435` 640x480@30
@@ -90,6 +132,9 @@ device count and LAN address:
 ```bash
 ./run_app.sh --config assets/configs/examples/intel_d435_pilot.json
 ```
+
+This command accesses physical Camera hardware. Confirm the intended D435 and current LAN address
+before running it; do not treat a fake profile or build-only check as hardware acceptance.
 
 A limited physical D435 acceptance was performed on the recorded research host with one Intel
 RealSense D435, librealsense serial `241222076339`, and the 640x480@30 Color/Depth profile. Vision

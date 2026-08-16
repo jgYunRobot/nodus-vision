@@ -1,5 +1,58 @@
 # Progress
 
+## 2026-08-13 - Operational README runbook
+
+### Changes
+
+- Updated the implementation summary through Phase 6 static Camera geometry.
+- Added explicit setup/full-build options and a run-profile table for Pilot-enabled fake Camera,
+  loopback fake Camera, rebuild-before-run, Release, and physical Intel D435 operation.
+- Documented provider health checks, current LAN addresses, setup/build separation, and the physical
+  Camera execution boundary.
+
+### Status
+
+- The README now matches the current Debug launcher default, direct provider ports 8900/8902,
+  Pilot-enabled profile, and immutable dependency-revision behavior of `make_full.sh`.
+- No Camera, Pilot, recording, provider contract, or hardware behavior changed.
+
+### Validation
+
+- Documentation commands were compared against the current launcher, full-build script, three
+  checked-in example configurations, and accepted D435 command record.
+- `git diff --check` passed; native build, CTest, Pilot connection, provider runtime, and Camera
+  execution were not run.
+
+### Next goals
+
+- Keep LAN advertised endpoints and allowed Portal origins synchronized with deployment address
+  changes.
+
+## 2026-08-12 - Explicit setup and build separation
+
+### Changes
+
+- Removed the implicit `setup_dev.sh` invocation from `make_full.sh`.
+- Clarified in the build help and README that dependency and submodule setup is an explicit,
+  separately requested operation.
+
+### Status
+
+- `make_full.sh` now configures, builds, and installs only from the dependency revisions already
+  present in the working tree.
+- The build entry point contains no Git or submodule mutation command.
+
+### Validation
+
+- `bash -n run_app.sh make_full.sh` and the `make_full.sh --help` path passed.
+- A static executable-command audit found no setup or Git invocation in `make_full.sh`.
+- Native build, CTest, Pilot connection, and Camera execution were not run.
+
+### Next goals
+
+- Run `setup_dev.sh` explicitly only when dependency initialization is intended, then invoke
+  `make_full.sh` without allowing the build to change dependency revisions.
+
 ## 2026-08-09 - Camera stream capacity and capture wait correction
 
 ### Changes

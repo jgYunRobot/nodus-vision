@@ -12,7 +12,7 @@ build_only=0
 printUsage() {
     cat <<'EOF'
 description:
-  initialize dependencies, build and locally install nodus-vision.
+  build and locally install nodus-vision with already-prepared dependencies.
 
 usage:
   ./make_full.sh [options]
@@ -29,6 +29,10 @@ examples:
   ./make_full.sh
   ./make_full.sh -j 32
   ./make_full.sh --build-type Debug --clean
+
+notes:
+  This script never initializes or updates submodules. Run ./setup_dev.sh explicitly
+  before the first build or whenever dependency setup is intentionally required.
 EOF
 }
 
@@ -125,7 +129,6 @@ fi
 cd "${project_root}"
 
 if [[ "${build_only}" -eq 0 ]]; then
-    "${project_root}/setup_dev.sh"
     echo "[make_full] configure nodus-vision with ${build_preset} preset."
     cmake --preset "${build_preset}"
 fi
